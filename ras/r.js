@@ -2,7 +2,7 @@
  * Reportli AI - Tracking Snippet
  * Hosted on Cloudflare Pages, loaded via <script src="..." data-key="...">
  *
- * Captures automatically:
+ * Captures :
  * - Clicks
  * - Page views / SPA navigation
  * - Sessions + session duration
