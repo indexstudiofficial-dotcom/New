@@ -1,0 +1,14 @@
+{
+  "name": "reportli-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reportli AI Cloudflare Worker for serving the tracking snippet and receiving analytics events",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
