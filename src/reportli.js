@@ -1,39 +1,3 @@
-/**
- * Reportli AI - Production Cloudflare Worker
- *
- * GET  /reportli.js
- *      -> serves Reportli tracking snippet
- *
- * GET  /
- *      -> health check
- *
- * POST /
- *      -> receives Reportli events
- *      -> saves the EXACT received JSON
- *         into user_activity.event (jsonb)
- *
- * Required Cloudflare secrets:
- *
- * SUPABASE_URL
- *   https://YOUR_PROJECT.supabase.co
- *
- * SUPABASE_SERVICE_ROLE_KEY
- *   Your Supabase service-role key
- */
-
-const REPORTLI_JS = String.raw`
-/**
- * Reportli AI - Tracking Snippet
- */
-
-(function () {
-  "use strict";
-
-  // ------------------------------------------------------------
-  // CONFIG
-  // ------------------------------------------------------------
-
-  var WORKER_URL = window.location.origin;
 
   var scriptTag =
     document.currentScript ||
