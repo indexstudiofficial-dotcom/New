@@ -22,21 +22,55 @@ const REPORTLI_JS = String.raw`
 (function () {
   "use strict";
 
-  var WORKER_URL = window.location.origin;
+  // ------------------------------------------------------------
+  // WORKER_URL is hardcoded to THIS worker's own domain.
+  // Do NOT derive from window.location.origin - that would
+  // point to the host SaaS app's domain instead of this Worker.
+  // ------------------------------------------------------------
 
-  var scriptTag =
-    document.currentScript ||
-    (function () {
-      var scripts = document.getElementsByTagName("script");
-      return scripts[scripts.length - 1];
-    })();
+  var WORKER_URL = "https://reportliai-sbs.reportliaihq.workers.dev";
+
+  // ------------------------------------------------------------
+  // Reliably find OUR script tag, not just "the last script on
+  // the page". document.currentScript can be null depending on
+  // how/when the script executes (defer, dynamic injection,
+  // caching). We search specifically for a script whose src
+  // contains "reportli.js" and which has a data-key attribute.
+  // ------------------------------------------------------------
+
+  function findOwnScriptTag() {
+    if (
+      document.currentScript &&
+      document.currentScript.getAttribute("data-key")
+    ) {
+      return document.currentScript;
+    }
+
+    var scripts = document.getElementsByTagName("script");
+
+    for (var i = scripts.length - 1; i >= 0; i--) {
+      var s = scripts[i];
+      var src = s.getAttribute("src") || "";
+
+      if (
+        src.indexOf("reportli.js") !== -1 &&
+        s.getAttribute("data-key")
+      ) {
+        return s;
+      }
+    }
+
+    return null;
+  }
+
+  var scriptTag = findOwnScriptTag();
 
   var API_KEY = scriptTag
     ? scriptTag.getAttribute("data-key")
     : null;
 
   if (!API_KEY) {
-    console.warn("Reportli: missing data-key attribute");
+    console.warn("Reportli: missing data-key attribute on script tag");
     return;
   }
 
@@ -159,7 +193,7 @@ const REPORTLI_JS = String.raw`
   }
 
   // ------------------------------------------------------------
-  // SEND DIRECTLY TO THE SAME WORKER
+  // SEND TO THE REPORTLI WORKER (fixed, hardcoded domain)
   // ------------------------------------------------------------
 
   function send(payload, useBeacon) {
@@ -266,7 +300,7 @@ const REPORTLI_JS = String.raw`
   }
 
   // ------------------------------------------------------------
-  // CLICK TRACKING
+  // CLICK TRACKING - every single click, all elements
   // ------------------------------------------------------------
 
   function trackClick(el) {
@@ -762,6 +796,20 @@ const REPORTLI_JS = String.raw`
   );
 
   // ------------------------------------------------------------
+  // HANDSHAKE - sent FIRST, before anything else.
+  // Minimal success confirmation with just the api key + domain.
+  // ------------------------------------------------------------
+
+  function sendHandshake() {
+    send({
+      type: "SUCCESS",
+      api_key: API_KEY,
+      domain: getDomain(),
+      time: nowISO()
+    });
+  }
+
+  // ------------------------------------------------------------
   // INITIALIZED
   // ------------------------------------------------------------
 
@@ -772,6 +820,10 @@ const REPORTLI_JS = String.raw`
 
     initialized = true;
 
+    // 1. Handshake first - confirms connection immediately.
+    sendHandshake();
+
+    // 2. Then the full SDK_INITIALIZED event with context.
     send(
       Object.assign(
         baseFields(),
@@ -1101,4 +1153,4 @@ function json(
       }
     }
   );
-  }
+            }
