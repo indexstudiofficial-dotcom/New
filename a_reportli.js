@@ -1,69 +1,79 @@
 /**
- * Reportli AI - Single Cloudflare Worker
+ * ============================================================
+ * REPORTLI AI
+ * SINGLE CLOUDFLARE WORKER
+ * ============================================================
  *
- * GET  /reportli.js
- *      -> serves the Reportli tracking snippet
+ * GET  /              -> health check
+ * GET  /reportli.js   -> Reportli SDK
+ * POST /              -> receives SDK events
+ * OPTIONS             -> CORS
  *
- * GET  /
- *      -> health check
+ * Required Cloudflare Worker secrets:
  *
- * POST /
- *      -> receives Reportli events
- *      -> saves activity to user_activity
- *      -> saves errors to errors.ai_analysis
+ * SUPABASE_URL
+ * SUPABASE_SERVICE_ROLE_KEY
  *
- * Required environment variables:
- *   SUPABASE_URL
- *   SUPABASE_SERVICE_ROLE_KEY
+ * IMPORTANT:
+ * Never put the Supabase service-role key inside REPORTLI_JS.
+ * The service-role key exists only on the Cloudflare Worker.
  */
 
 const REPORTLI_JS = String.raw`
 /**
- * Reportli AI - Tracking Snippet
+ * ============================================================
+ * REPORTLI AI - BROWSER SDK
+ * ============================================================
  */
 
 (function () {
   "use strict";
 
-  // ------------------------------------------------------------
-  // CONFIGURATION
-  // ------------------------------------------------------------
+  // ============================================================
+  // CONFIG
+  // ============================================================
 
   var WORKER_URL =
     "https://reportliai-sbs.reportliaihq.workers.dev";
 
-  // ------------------------------------------------------------
-  // FIND REPORTLI SCRIPT
-  // ------------------------------------------------------------
+  // ============================================================
+  // FIND SCRIPT
+  // ============================================================
 
   function findOwnScriptTag() {
-    if (
-      document.currentScript &&
-      document.currentScript.getAttribute("data-key")
-    ) {
-      return document.currentScript;
-    }
-
-    var scripts =
-      document.getElementsByTagName("script");
-
-    for (
-      var i = scripts.length - 1;
-      i >= 0;
-      i--
-    ) {
-      var s = scripts[i];
-
-      var src =
-        s.getAttribute("src") || "";
-
+    try {
       if (
-        src.indexOf("reportli.js") !== -1 &&
-        s.getAttribute("data-key")
+        document.currentScript &&
+        document.currentScript.getAttribute("data-key")
       ) {
-        return s;
+        return document.currentScript;
       }
-    }
+
+      var scripts =
+        document.getElementsByTagName("script");
+
+      for (
+        var i = scripts.length - 1;
+        i >= 0;
+        i--
+      ) {
+        var script =
+          scripts[i];
+
+        var src =
+          script.getAttribute("src") || "";
+
+        if (
+          (
+            src.indexOf("reportli.js") !== -1 ||
+            src.indexOf("a_reportli.js") !== -1
+          ) &&
+          script.getAttribute("data-key")
+        ) {
+          return script;
+        }
+      }
+    } catch (e) {}
 
     return null;
   }
@@ -78,38 +88,53 @@ const REPORTLI_JS = String.raw`
 
   if (!API_KEY) {
     console.warn(
-      "Reportli: missing data-key attribute on script tag"
+      "Reportli: data-key is missing."
     );
 
     return;
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // SESSION
-  // ------------------------------------------------------------
+  // ============================================================
 
   var sessionId =
     "sess_" +
     Math.random()
       .toString(36)
       .slice(2) +
+    "_" +
     Date.now().toString(36);
 
   var sessionStartedAt =
     new Date().toISOString();
 
-  var pageViews = 0;
-  var clickCount = 0;
+  var initialized =
+    false;
 
-  var initialized = false;
+  var sessionEnded =
+    false;
 
-  // ------------------------------------------------------------
-  // USER IDENTITY
-  // ------------------------------------------------------------
+  var pageViews =
+    0;
+
+  var clickCount =
+    0;
+
+  // ============================================================
+  // USER
+  // ============================================================
+
+  var user = {
+    email: "anonymous",
+    userId: "anonymous"
+  };
 
   function detectUser() {
-    var email = "anonymous";
-    var userId = "anonymous";
+    var detected = {
+      email: "anonymous",
+      userId: "anonymous"
+    };
 
     try {
       if (
@@ -119,50 +144,52 @@ const REPORTLI_JS = String.raw`
         if (
           window.reportliUser.email
         ) {
-          email =
-            window.reportliUser.email;
+          detected.email =
+            String(
+              window.reportliUser.email
+            );
         }
 
         if (
           window.reportliUser.userId
         ) {
-          userId =
-            window.reportliUser.userId;
+          detected.userId =
+            String(
+              window.reportliUser.userId
+            );
         }
       }
     } catch (e) {}
 
-    return {
-      email: email,
-      userId: userId
-    };
+    return detected;
   }
-
-  var user =
-    detectUser();
 
   function refreshUser() {
-    var updated =
-      detectUser();
+    try {
+      var detected =
+        detectUser();
 
-    if (
-      updated.email !== "anonymous"
-    ) {
-      user.email =
-        updated.email;
-    }
+      if (
+        detected.email &&
+        detected.email !== "anonymous"
+      ) {
+        user.email =
+          detected.email;
+      }
 
-    if (
-      updated.userId !== "anonymous"
-    ) {
-      user.userId =
-        updated.userId;
-    }
+      if (
+        detected.userId &&
+        detected.userId !== "anonymous"
+      ) {
+        user.userId =
+          detected.userId;
+      }
+    } catch (e) {}
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // HELPERS
-  // ------------------------------------------------------------
+  // ============================================================
 
   function nowISO() {
     return new Date().toISOString();
@@ -172,7 +199,8 @@ const REPORTLI_JS = String.raw`
     try {
       return (
         window.location.pathname +
-        window.location.search
+        window.location.search +
+        window.location.hash
       );
     } catch (e) {
       return "unknown";
@@ -195,28 +223,44 @@ const REPORTLI_JS = String.raw`
     }
   }
 
-  function baseFields() {
+  function getBaseFields() {
     refreshUser();
 
     return {
-      api_key: API_KEY,
-      domain: getDomain(),
-      session_id: sessionId,
-      email: user.email,
-      user_id: user.userId,
-      page: getPage(),
-      browser: getBrowser(),
-      time: nowISO()
+      api_key:
+        API_KEY,
+
+      domain:
+        getDomain(),
+
+      session_id:
+        sessionId,
+
+      email:
+        user.email,
+
+      user_id:
+        user.userId,
+
+      page:
+        getPage(),
+
+      browser:
+        getBrowser(),
+
+      time:
+        nowISO()
     };
   }
 
-  // ------------------------------------------------------------
-  // SEND EVENT IMMEDIATELY
+  // ============================================================
+  // SEND
   //
-  // There is NO queue.
-  // There is NO 2-second delay.
-  // There is NO BATCH for new activity events.
-  // ------------------------------------------------------------
+  // Every event is sent immediately.
+  // No queue.
+  // No 2-second delay.
+  // No batching for new SDK events.
+  // ============================================================
 
   function send(
     payload,
@@ -226,31 +270,45 @@ const REPORTLI_JS = String.raw`
       var body =
         JSON.stringify(payload);
 
+      // --------------------------------------------------------
+      // PAGE UNLOAD
+      // --------------------------------------------------------
+
       if (
         useBeacon &&
         navigator.sendBeacon
       ) {
-        var blob =
-          new Blob(
-            [body],
-            {
-              type:
-                "application/json"
-            }
-          );
+        try {
+          var blob =
+            new Blob(
+              [body],
+              {
+                type:
+                  "application/json"
+              }
+            );
 
-        navigator.sendBeacon(
-          WORKER_URL,
-          blob
-        );
+          var sent =
+            navigator.sendBeacon(
+              WORKER_URL,
+              blob
+            );
 
-        return;
+          if (sent) {
+            return;
+          }
+        } catch (e) {}
       }
+
+      // --------------------------------------------------------
+      // NORMAL REQUEST
+      // --------------------------------------------------------
 
       fetch(
         WORKER_URL,
         {
-          method: "POST",
+          method:
+            "POST",
 
           headers: {
             "Content-Type":
@@ -260,47 +318,171 @@ const REPORTLI_JS = String.raw`
               API_KEY
           },
 
-          body: body,
+          body:
+            body,
 
-          keepalive: true
+          keepalive:
+            true,
+
+          credentials:
+            "omit"
         }
       ).catch(
         function () {}
       );
+
     } catch (e) {}
   }
 
-  // ------------------------------------------------------------
-  // CLICK TRACKING
-  // ------------------------------------------------------------
+  // ============================================================
+  // CLICK LABEL
+  // ============================================================
 
-  function trackClick(el) {
+  function getClickableElement(
+    element
+  ) {
     try {
+      if (
+        !element ||
+        element.nodeType !== 1
+      ) {
+        return null;
+      }
+
+      var clickable =
+        element.closest(
+          "button, a, [role='button'], input[type='button'], input[type='submit'], [onclick]"
+        );
+
+      return (
+        clickable ||
+        element
+      );
+    } catch (e) {
+      return element;
+    }
+  }
+
+  function getElementLabel(
+    element
+  ) {
+    try {
+      if (!element) {
+        return "(no label)";
+      }
+
+      var label = "";
+
+      // Text
+      label =
+        element.innerText ||
+        element.textContent ||
+        "";
+
+      label =
+        String(label)
+          .replace(
+            /\s+/g,
+            " "
+          )
+          .trim();
+
+      // aria-label
+      if (!label) {
+        label =
+          element.getAttribute(
+            "aria-label"
+          ) || "";
+      }
+
+      // title
+      if (!label) {
+        label =
+          element.getAttribute(
+            "title"
+          ) || "";
+      }
+
+      // value
+      if (!label) {
+        label =
+          element.getAttribute(
+            "value"
+          ) || "";
+      }
+
+      // placeholder
+      if (!label) {
+        label =
+          element.getAttribute(
+            "placeholder"
+          ) || "";
+      }
+
+      // name
+      if (!label) {
+        label =
+          element.getAttribute(
+            "name"
+          ) || "";
+      }
+
+      // id
+      if (!label) {
+        label =
+          element.getAttribute(
+            "id"
+          ) || "";
+      }
+
+      label =
+        String(label)
+          .replace(
+            /\s+/g,
+            " "
+          )
+          .trim();
+
+      return (
+        label
+          ? label.slice(0, 200)
+          : "(no label)"
+      );
+
+    } catch (e) {
+      return "(no label)";
+    }
+  }
+
+  // ============================================================
+  // CLICK TRACKING
+  // ============================================================
+
+  function trackClick(
+    originalElement
+  ) {
+    try {
+      var element =
+        getClickableElement(
+          originalElement
+        );
+
       clickCount++;
 
       var tag =
-        el.tagName
-          ? el.tagName.toLowerCase()
+        element &&
+        element.tagName
+          ? element.tagName.toLowerCase()
           : "unknown";
 
-      var label = (
-        el.innerText ||
-        el.textContent ||
-        el.value ||
-        el.getAttribute(
-          "aria-label"
-        ) ||
-        el.getAttribute(
-          "title"
-        ) ||
-        ""
-      )
-        .trim()
-        .slice(0, 120);
+      var label =
+        getElementLabel(
+          element
+        );
 
       send(
         Object.assign(
-          baseFields(),
+          getBaseFields(),
           {
             type:
               "ACTIVITY",
@@ -312,33 +494,29 @@ const REPORTLI_JS = String.raw`
               tag,
 
             label:
-              label ||
-              "(no label)"
+              label
           }
         )
       );
+
     } catch (e) {}
   }
 
   document.addEventListener(
     "click",
     function (event) {
-      var el =
-        event.target;
-
-      if (
-        el &&
-        el.nodeType === 1
-      ) {
-        trackClick(el);
-      }
+      try {
+        trackClick(
+          event.target
+        );
+      } catch (e) {}
     },
     true
   );
 
-  // ------------------------------------------------------------
-  // PAGE VIEWS
-  // ------------------------------------------------------------
+  // ============================================================
+  // PAGE VIEW
+  // ============================================================
 
   function trackPageView() {
     try {
@@ -346,7 +524,7 @@ const REPORTLI_JS = String.raw`
 
       send(
         Object.assign(
-          baseFields(),
+          getBaseFields(),
           {
             type:
               "ACTIVITY",
@@ -356,26 +534,37 @@ const REPORTLI_JS = String.raw`
           }
         )
       );
+
     } catch (e) {}
   }
+
+  // ============================================================
+  // SPA NAVIGATION
+  // ============================================================
 
   var currentPath =
     getPage();
 
-  // ------------------------------------------------------------
-  // SPA NAVIGATION
-  // ------------------------------------------------------------
-
   function handleUrlChange() {
-    var newPath =
-      getPage();
+    try {
+      var newPath =
+        getPage();
 
-    if (
-      newPath !== currentPath
-    ) {
+      if (
+        newPath === currentPath
+      ) {
+        return;
+      }
+
+      var previousPath =
+        currentPath;
+
+      currentPath =
+        newPath;
+
       send(
         Object.assign(
-          baseFields(),
+          getBaseFields(),
           {
             type:
               "ACTIVITY",
@@ -384,7 +573,7 @@ const REPORTLI_JS = String.raw`
               "navigation",
 
             from:
-              currentPath,
+              previousPath,
 
             to:
               newPath
@@ -392,11 +581,9 @@ const REPORTLI_JS = String.raw`
         )
       );
 
-      currentPath =
-        newPath;
-
       trackPageView();
-    }
+
+    } catch (e) {}
   }
 
   try {
@@ -405,12 +592,15 @@ const REPORTLI_JS = String.raw`
 
     history.pushState =
       function () {
-        originalPushState.apply(
-          history,
-          arguments
-        );
+        var result =
+          originalPushState.apply(
+            history,
+            arguments
+          );
 
         handleUrlChange();
+
+        return result;
       };
 
     var originalReplaceState =
@@ -418,12 +608,15 @@ const REPORTLI_JS = String.raw`
 
     history.replaceState =
       function () {
-        originalReplaceState.apply(
-          history,
-          arguments
-        );
+        var result =
+          originalReplaceState.apply(
+            history,
+            arguments
+          );
 
         handleUrlChange();
+
+        return result;
       };
 
     window.addEventListener(
@@ -435,46 +628,31 @@ const REPORTLI_JS = String.raw`
       "hashchange",
       handleUrlChange
     );
+
   } catch (e) {}
 
-  // ------------------------------------------------------------
-  // EXTRACT ERROR LOCATION
-  // ------------------------------------------------------------
+  // ============================================================
+  // ERROR LOCATION
+  // ============================================================
 
-  function extractErrorLocation(
-    err
+  function cleanFileName(
+    value
   ) {
-    var fileName =
-      null;
-
-    var lineNumber =
-      null;
-
     try {
-      if (
-        err &&
-        err.filename
-      ) {
-        fileName =
-          String(
-            err.filename
-          );
+      if (!value) {
+        return null;
       }
 
-      if (
-        err &&
-        err.lineno != null
-      ) {
-        lineNumber =
-          Number(
-            err.lineno
-          );
-      }
+      var fileName =
+        String(value);
 
+      // URL
       if (
-        fileName &&
         fileName.indexOf(
-          "http"
+          "http://"
+        ) === 0 ||
+        fileName.indexOf(
+          "https://"
         ) === 0
       ) {
         try {
@@ -483,8 +661,11 @@ const REPORTLI_JS = String.raw`
               fileName
             );
 
+          var pathname =
+            parsed.pathname;
+
           var parts =
-            parsed.pathname
+            pathname
               .split("/")
               .filter(
                 function (part) {
@@ -493,116 +674,172 @@ const REPORTLI_JS = String.raw`
               );
 
           if (
-            parts.length > 0
+            parts.length
           ) {
-            fileName =
-              parts[
-                parts.length - 1
-              ];
+            return parts[
+              parts.length - 1
+            ];
           }
         } catch (e) {}
       }
 
+      return fileName;
+
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function extractErrorLocation(
+    error
+  ) {
+    var fileName =
+      null;
+
+    var lineNumber =
+      null;
+
+    var columnNumber =
+      null;
+
+    try {
       if (
-        !fileName &&
-        err &&
-        err.stack
+        error &&
+        error.filename
+      ) {
+        fileName =
+          error.filename;
+      }
+
+      if (
+        error &&
+        error.lineno != null
+      ) {
+        lineNumber =
+          Number(
+            error.lineno
+          );
+      }
+
+      if (
+        error &&
+        error.colno != null
+      ) {
+        columnNumber =
+          Number(
+            error.colno
+          );
+      }
+
+      // --------------------------------------------------------
+      // STACK PARSING
+      // --------------------------------------------------------
+
+      if (
+        error &&
+        error.stack
       ) {
         var stack =
           String(
-            err.stack
+            error.stack
           );
 
         var match =
           stack.match(
-            /(?:at\s+.*?\s+\()?((?:https?:\\/\\/|webpack:\\/\\/|file:\\/\\/|\\/)[^\\s\\):]+):(\\d+)(?::\\d+)?\\)?/
+            /(?:at\s+.*?\s+\()?((?:https?:\/\/|webpack:\/\/|file:\/\/\/|\/)[^\s\):]+):(\d+)(?::(\d+))?\)?/
           );
 
         if (match) {
-          fileName =
-            match[1];
-
-          lineNumber =
-            Number(
-              match[2]
-            );
+          if (!fileName) {
+            fileName =
+              match[1];
+          }
 
           if (
-            fileName.indexOf(
-              "http"
-            ) === 0
+            lineNumber == null
           ) {
-            try {
-              var parsedStack =
-                new URL(
-                  fileName
-                );
+            lineNumber =
+              Number(
+                match[2]
+              );
+          }
 
-              var stackParts =
-                parsedStack.pathname
-                  .split("/")
-                  .filter(
-                    function (part) {
-                      return part;
-                    }
-                  );
-
-              if (
-                stackParts.length > 0
-              ) {
-                fileName =
-                  stackParts[
-                    stackParts.length - 1
-                  ];
-              }
-            } catch (e) {}
+          if (
+            columnNumber == null &&
+            match[3]
+          ) {
+            columnNumber =
+              Number(
+                match[3]
+              );
           }
         }
       }
+
     } catch (e) {}
 
     return {
       file_name:
-        fileName,
+        cleanFileName(
+          fileName
+        ),
 
       line_number:
-        lineNumber
+        lineNumber,
+
+      column_number:
+        columnNumber
     };
   }
 
-  // ------------------------------------------------------------
-  // JAVASCRIPT ERRORS
-  // ------------------------------------------------------------
+  // ============================================================
+  // ERROR TRACKING
+  // ============================================================
 
   function trackError(
-    err,
+    error,
     context
   ) {
     try {
       var message =
-        err &&
-        err.message != null
-          ? String(
-              err.message
-            )
-          : String(err);
+        "Unknown error";
+
+      if (
+        error &&
+        error.message != null
+      ) {
+        message =
+          String(
+            error.message
+          );
+      } else if (
+        error != null
+      ) {
+        message =
+          String(error);
+      }
 
       var stack =
-        err &&
-        err.stack
-          ? String(
-              err.stack
-            )
-          : "";
+        "";
+
+      if (
+        error &&
+        error.stack
+      ) {
+        stack =
+          String(
+            error.stack
+          );
+      }
 
       var location =
         extractErrorLocation(
-          err
+          error
         );
 
       send(
         Object.assign(
-          baseFields(),
+          getBaseFields(),
           {
             type:
               "ERROR",
@@ -619,18 +856,22 @@ const REPORTLI_JS = String.raw`
             line_number:
               location.line_number,
 
+            column_number:
+              location.column_number,
+
             context:
               context ||
               "auto"
           }
         )
       );
+
     } catch (e) {}
   }
 
-  // ------------------------------------------------------------
-  // WINDOW ERRORS
-  // ------------------------------------------------------------
+  // ============================================================
+  // WINDOW ERROR
+  // ============================================================
 
   window.addEventListener(
     "error",
@@ -639,45 +880,58 @@ const REPORTLI_JS = String.raw`
         if (
           event.error
         ) {
-          var error =
-            event.error;
-
           if (
-            !error.filename &&
+            !event.error.filename &&
             event.filename
           ) {
-            error.filename =
-              event.filename;
+            try {
+              event.error.filename =
+                event.filename;
+            } catch (e) {}
           }
 
           if (
-            error.lineno == null &&
+            event.error.lineno == null &&
             event.lineno != null
           ) {
-            error.lineno =
-              event.lineno;
+            try {
+              event.error.lineno =
+                event.lineno;
+            } catch (e) {}
+          }
+
+          if (
+            event.error.colno == null &&
+            event.colno != null
+          ) {
+            try {
+              event.error.colno =
+                event.colno;
+            } catch (e) {}
           }
 
           trackError(
-            error,
+            event.error,
             "window"
           );
-        } else if (
-          event.message
-        ) {
+
+        } else {
           trackError(
             {
               message:
-                event.message,
+                event.message ||
+                "Unknown window error",
 
               stack:
                 event.filename
-                  ? "at " +
-                    event.filename +
-                    ":" +
-                    event.lineno +
-                    ":" +
-                    event.colno
+                  ? (
+                      "at " +
+                      event.filename +
+                      ":" +
+                      event.lineno +
+                      ":" +
+                      event.colno
+                    )
                   : "",
 
               filename:
@@ -686,40 +940,46 @@ const REPORTLI_JS = String.raw`
 
               lineno:
                 event.lineno ||
+                null,
+
+              colno:
+                event.colno ||
                 null
             },
             "window"
           );
         }
+
       } catch (e) {}
     },
     true
   );
 
-  // ------------------------------------------------------------
-  // UNHANDLED PROMISE REJECTIONS
-  // ------------------------------------------------------------
+  // ============================================================
+  // UNHANDLED PROMISE REJECTION
+  // ============================================================
 
   window.addEventListener(
     "unhandledrejection",
     function (event) {
       try {
+        var reason =
+          event.reason;
+
         if (
-          event.reason instanceof
-          Error
+          reason instanceof Error
         ) {
           trackError(
-            event.reason,
+            reason,
             "unhandledrejection"
           );
         } else {
           trackError(
             {
               message:
-                String(
-                  event.reason ||
-                    "Unhandled Promise Rejection"
-                ),
+                reason != null
+                  ? String(reason)
+                  : "Unhandled Promise Rejection",
 
               stack:
                 ""
@@ -727,20 +987,22 @@ const REPORTLI_JS = String.raw`
             "unhandledrejection"
           );
         }
+
       } catch (e) {}
     }
   );
 
-  // ------------------------------------------------------------
-  // FETCH FAILURES
-  // ------------------------------------------------------------
+  // ============================================================
+  // FETCH MONITORING
+  // ============================================================
 
   try {
     var originalFetch =
       window.fetch;
 
     if (
-      originalFetch
+      typeof originalFetch ===
+      "function"
     ) {
       window.fetch =
         function () {
@@ -751,18 +1013,35 @@ const REPORTLI_JS = String.raw`
             args[0];
 
           var init =
-            args[1] || {};
+            args[1] ||
+            {};
 
           var url =
-            typeof input ===
-            "string"
-              ? input
-              : input &&
-                input.url
-              ? input.url
-              : "";
+            "";
 
-          // Don't intercept Reportli itself.
+          var method =
+            String(
+              init.method ||
+              "GET"
+            ).toUpperCase();
+
+          try {
+            if (
+              typeof input ===
+              "string"
+            ) {
+              url =
+                input;
+            } else if (
+              input &&
+              input.url
+            ) {
+              url =
+                input.url;
+            }
+          } catch (e) {}
+
+          // Never monitor Reportli requests.
           if (
             url.indexOf(
               WORKER_URL
@@ -780,15 +1059,14 @@ const REPORTLI_JS = String.raw`
               args
             )
             .then(
-              function (
-                response
-              ) {
+              function (response) {
+
                 if (
                   !response.ok
                 ) {
                   send(
                     Object.assign(
-                      baseFields(),
+                      getBaseFields(),
                       {
                         type:
                           "ERROR",
@@ -797,14 +1075,12 @@ const REPORTLI_JS = String.raw`
                           "Fetch " +
                           response.status +
                           ": " +
-                          (init.method ||
-                            "GET") +
+                          method +
                           " " +
                           url,
 
                         stack:
-                          (init.method ||
-                            "GET") +
+                          method +
                           " " +
                           url +
                           " -> " +
@@ -814,6 +1090,9 @@ const REPORTLI_JS = String.raw`
                           null,
 
                         line_number:
+                          null,
+
+                        column_number:
                           null,
 
                         context:
@@ -827,72 +1106,80 @@ const REPORTLI_JS = String.raw`
               }
             )
             .catch(
-              function (err) {
+              function (error) {
+
                 trackError(
                   {
                     message:
                       "Fetch failed: " +
-                      (init.method ||
-                        "GET") +
+                      method +
                       " " +
                       url +
                       " - " +
-                      (err &&
-                        err.message),
+                      (
+                        error &&
+                        error.message
+                          ? error.message
+                          : "Network error"
+                      ),
 
                     stack:
-                      err &&
-                      err.stack,
-
-                    filename:
-                      null,
-
-                    lineno:
-                      null
+                      error &&
+                      error.stack
+                        ? error.stack
+                        : ""
                   },
                   "fetch"
                 );
 
-                throw err;
+                throw error;
               }
             );
         };
     }
+
   } catch (e) {}
 
-  // ------------------------------------------------------------
-  // XHR FAILURES
-  // ------------------------------------------------------------
+  // ============================================================
+  // XHR MONITORING
+  // ============================================================
 
   try {
-    var OrigOpen =
-      XMLHttpRequest
-        .prototype
-        .open;
+    var OriginalXHR =
+      XMLHttpRequest;
 
-    var OrigSend =
-      XMLHttpRequest
-        .prototype
-        .send;
+    var originalOpen =
+      OriginalXHR.prototype.open;
 
-    XMLHttpRequest.prototype.open =
+    var originalSend =
+      OriginalXHR.prototype.send;
+
+    OriginalXHR.prototype.open =
       function (
         method,
         url
       ) {
-        this._reportliMethod =
-          method;
+        try {
+          this._reportliMethod =
+            String(
+              method ||
+              "GET"
+            ).toUpperCase();
 
-        this._reportliUrl =
-          url;
+          this._reportliUrl =
+            String(
+              url ||
+              ""
+            );
+        } catch (e) {}
 
-        return OrigOpen.apply(
+        return originalOpen.apply(
           this,
           arguments
         );
       };
 
-    XMLHttpRequest.prototype.send =
+    OriginalXHR.prototype.send =
       function () {
         var xhr =
           this;
@@ -905,96 +1192,117 @@ const REPORTLI_JS = String.raw`
           xhr._reportliMethod ||
           "GET";
 
-        if (
+        var shouldTrack =
           url.indexOf(
             WORKER_URL
-          ) !== 0
+          ) !== 0;
+
+        if (
+          shouldTrack
         ) {
-          xhr.addEventListener(
-            "loadend",
-            function () {
-              if (
-                xhr.status >=
-                  400 ||
-                xhr.status ===
-                  0
-              ) {
-                send(
-                  Object.assign(
-                    baseFields(),
-                    {
-                      type:
-                        "ERROR",
+          try {
+            xhr.addEventListener(
+              "loadend",
+              function () {
+                try {
+                  if (
+                    xhr.status >=
+                      400 ||
+                    xhr.status === 0
+                  ) {
+                    send(
+                      Object.assign(
+                        getBaseFields(),
+                        {
+                          type:
+                            "ERROR",
 
-                      message:
-                        "XHR " +
-                        xhr.status +
-                        ": " +
-                        method +
-                        " " +
-                        url,
+                          message:
+                            "XHR " +
+                            xhr.status +
+                            ": " +
+                            method +
+                            " " +
+                            url,
 
-                      stack:
-                        method +
-                        " " +
-                        url +
-                        " -> " +
-                        xhr.status,
+                          stack:
+                            method +
+                            " " +
+                            url +
+                            " -> " +
+                            xhr.status,
 
-                      file_name:
-                        null,
+                          file_name:
+                            null,
 
-                      line_number:
-                        null,
+                          line_number:
+                            null,
 
-                      context:
-                        "xhr"
-                    }
-                  )
-                );
+                          column_number:
+                            null,
+
+                          context:
+                            "xhr"
+                        }
+                      )
+                    );
+                  }
+                } catch (e) {}
               }
-            }
-          );
+            );
+          } catch (e) {}
         }
 
-        return OrigSend.apply(
+        return originalSend.apply(
           this,
           arguments
         );
       };
+
   } catch (e) {}
 
-  // ------------------------------------------------------------
+  // ============================================================
   // SESSION END
-  // ------------------------------------------------------------
+  // ============================================================
 
   function sendSessionEnd() {
     try {
+      if (
+        sessionEnded
+      ) {
+        return;
+      }
+
+      sessionEnded =
+        true;
+
       var endedAt =
         nowISO();
 
-      var startMs =
+      var startTime =
         new Date(
           sessionStartedAt
         ).getTime();
 
-      var endMs =
+      var endTime =
         new Date(
           endedAt
         ).getTime();
 
-      var durationSeconds =
+      var duration =
         Math.max(
           0,
           Math.round(
-            (endMs - startMs) /
-              1000
+            (
+              endTime -
+              startTime
+            ) / 1000
           )
         );
 
       send(
         Object.assign(
-          baseFields(),
+          getBaseFields(),
           {
             type:
               "SESSION_END",
@@ -1006,7 +1314,7 @@ const REPORTLI_JS = String.raw`
               endedAt,
 
             duration_seconds:
-              durationSeconds,
+              duration,
 
             page_views:
               pageViews,
@@ -1017,6 +1325,7 @@ const REPORTLI_JS = String.raw`
         ),
         true
       );
+
     } catch (e) {}
   }
 
@@ -1025,29 +1334,9 @@ const REPORTLI_JS = String.raw`
     sendSessionEnd
   );
 
-  // ------------------------------------------------------------
-  // HANDSHAKE
-  // ------------------------------------------------------------
-
-  function sendHandshake() {
-    send({
-      type:
-        "SUCCESS",
-
-      api_key:
-        API_KEY,
-
-      domain:
-        getDomain(),
-
-      time:
-        nowISO()
-    });
-  }
-
-  // ------------------------------------------------------------
-  // SESSION START
-  // ------------------------------------------------------------
+  // ============================================================
+  // INITIAL SESSION
+  // ============================================================
 
   function init() {
     if (
@@ -1059,13 +1348,13 @@ const REPORTLI_JS = String.raw`
     initialized =
       true;
 
-    // Connection handshake.
-    sendHandshake();
+    // ----------------------------------------------------------
+    // SESSION STARTED
+    // ----------------------------------------------------------
 
-    // New session event.
     send(
       Object.assign(
-        baseFields(),
+        getBaseFields(),
         {
           type:
             "SESSION_STARTED",
@@ -1076,29 +1365,40 @@ const REPORTLI_JS = String.raw`
       )
     );
 
-    // Initial page view.
+    // ----------------------------------------------------------
+    // INITIAL PAGE VIEW
+    // ----------------------------------------------------------
+
     trackPageView();
   }
 
+  // ============================================================
+  // INITIALIZE
+  // ============================================================
+
   init();
 
-  // ------------------------------------------------------------
-  // MANUAL API
-  // ------------------------------------------------------------
+  // ============================================================
+  // PUBLIC API
+  // ============================================================
 
   window.Reportli = {
 
+    // ----------------------------------------------------------
+    // IDENTIFY
+    // ----------------------------------------------------------
+
     identify:
-      function (
-        identity
-      ) {
+      function (identity) {
         try {
           if (
             identity &&
             identity.email
           ) {
             user.email =
-              identity.email;
+              String(
+                identity.email
+              );
           }
 
           if (
@@ -1106,61 +1406,102 @@ const REPORTLI_JS = String.raw`
             identity.userId
           ) {
             user.userId =
-              identity.userId;
+              String(
+                identity.userId
+              );
           }
 
           send(
             Object.assign(
-              baseFields(),
+              getBaseFields(),
               {
                 type:
                   "IDENTIFY"
               }
             )
           );
+
         } catch (e) {}
       },
 
+    // ----------------------------------------------------------
+    // TRACK CUSTOM EVENT
+    // ----------------------------------------------------------
+
     track:
       function (
-        event,
+        eventName,
         properties
       ) {
         try {
-          if (!event) {
+          if (!eventName) {
             return;
           }
 
-          // Send custom activity immediately.
           send(
             Object.assign(
-              baseFields(),
+              getBaseFields(),
               {
                 type:
                   "ACTIVITY",
 
                 event:
-                  event,
+                  String(
+                    eventName
+                  ),
 
                 properties:
-                  properties ||
-                  {}
+                  properties &&
+                  typeof properties ===
+                    "object"
+                    ? properties
+                    : {}
               }
             )
           );
+
         } catch (e) {}
       },
 
+    // ----------------------------------------------------------
+    // CAPTURE ERROR
+    // ----------------------------------------------------------
+
     capture:
-      function (
-        error
-      ) {
+      function (error) {
         trackError(
           error,
           "manual"
         );
+      },
+
+    // ----------------------------------------------------------
+    // GET SESSION ID
+    // ----------------------------------------------------------
+
+    getSessionId:
+      function () {
+        return sessionId;
+      },
+
+    // ----------------------------------------------------------
+    // GET USER
+    // ----------------------------------------------------------
+
+    getUser:
+      function () {
+        refreshUser();
+
+        return {
+          email:
+            user.email,
+
+          userId:
+            user.userId
+        };
       }
   };
+
 })();
 `;
 
@@ -1169,6 +1510,7 @@ const REPORTLI_JS = String.raw`
 // ============================================================
 
 export default {
+
   async fetch(
     request,
     env
@@ -1178,9 +1520,9 @@ export default {
         request.url
       );
 
-    // ----------------------------------------------------------
+    // ========================================================
     // CORS
-    // ----------------------------------------------------------
+    // ========================================================
 
     if (
       request.method ===
@@ -1198,15 +1540,49 @@ export default {
       );
     }
 
-    // ----------------------------------------------------------
-    // GET /reportli.js
-    // ----------------------------------------------------------
+    // ========================================================
+    // GET /
+    // ========================================================
 
     if (
       request.method ===
         "GET" &&
       url.pathname ===
-        "/reportli.js"
+        "/"
+    ) {
+      return json(
+        {
+          success:
+            true,
+
+          service:
+            "Reportli AI",
+
+          status:
+            "online",
+
+          sdk:
+            "/reportli.js",
+
+          database:
+            "Supabase"
+        }
+      );
+    }
+
+    // ========================================================
+    // GET /reportli.js
+    // ========================================================
+
+    if (
+      request.method ===
+        "GET" &&
+      (
+        url.pathname ===
+          "/reportli.js" ||
+        url.pathname ===
+          "/a_reportli.js"
+      )
     ) {
       return new Response(
         REPORTLI_JS,
@@ -1219,7 +1595,7 @@ export default {
               "application/javascript; charset=UTF-8",
 
             "Cache-Control":
-              "public, max-age=300",
+              "no-cache, no-store, must-revalidate",
 
             ...corsHeaders()
           }
@@ -1227,209 +1603,298 @@ export default {
       );
     }
 
-    // ----------------------------------------------------------
-    // GET /
-    // ----------------------------------------------------------
+    // ========================================================
+    // POST EVENTS
+    // ========================================================
 
     if (
       request.method ===
-        "GET" &&
-      url.pathname === "/"
-    ) {
-      return json({
-        success:
-          true,
-
-        service:
-          "Reportli AI",
-
-        message:
-          "Reportli Worker is running",
-
-        snippet:
-          "/reportli.js"
-      });
-    }
-
-    // ----------------------------------------------------------
-    // ONLY POST EVENTS
-    // ----------------------------------------------------------
-
-    if (
-      request.method !==
       "POST"
     ) {
-      return json(
-        {
-          success:
-            false,
-
-          error:
-            "POST required"
-        },
-        405
-      );
-    }
-
-    // ----------------------------------------------------------
-    // READ BODY
-    // ----------------------------------------------------------
-
-    let rawBody;
-
-    try {
-      rawBody =
-        await request.text();
-    } catch (error) {
-      return json(
-        {
-          success:
-            false,
-
-          error:
-            "Could not read request body"
-        },
-        400
-      );
-    }
-
-    if (!rawBody) {
-      return json(
-        {
-          success:
-            false,
-
-          error:
-            "Empty request body"
-        },
-        400
-      );
-    }
-
-    // ----------------------------------------------------------
-    // PARSE JSON
-    // ----------------------------------------------------------
-
-    let body;
-
-    try {
-      body =
-        JSON.parse(
-          rawBody
-        );
-    } catch (error) {
-      return json(
-        {
-          success:
-            false,
-
-          error:
-            "Invalid JSON"
-        },
-        400
-      );
-    }
-
-    // ----------------------------------------------------------
-    // API KEY
-    // ----------------------------------------------------------
-
-    const apiKey =
-      request.headers.get(
-        "x-api-key"
-      ) ||
-      body.api_key ||
-      body.apiKey;
-
-    if (!apiKey) {
-      return json(
-        {
-          success:
-            false,
-
-          error:
-            "Missing API key"
-        },
-        401
-      );
-    }
-
-    // ----------------------------------------------------------
-    // HANDLE BATCH
-    //
-    // This is retained for compatibility with older versions
-    // of the Reportli snippet.
-    // New snippet versions do NOT send BATCH.
-    // ----------------------------------------------------------
-
-    if (
-      body.type ===
-        "BATCH" &&
-      Array.isArray(
-        body.events
-      )
-    ) {
-      const results = [];
-
-      for (
-        const event of
-          body.events
-      ) {
-        const result =
-          await processEvent(
-            event,
-            apiKey,
-            env
-          );
-
-        results.push(
-          result
-        );
-      }
-
-      return json({
-        success:
-          true,
-
-        saved:
-          true,
-
-        processed:
-          results.length
-      });
-    }
-
-    // ----------------------------------------------------------
-    // PROCESS SINGLE EVENT
-    // ----------------------------------------------------------
-
-    const result =
-      await processEvent(
-        body,
-        apiKey,
+      return await receiveEvent(
+        request,
         env
       );
+    }
 
-    if (
-      !result.success
+    // ========================================================
+    // OTHER METHODS
+    // ========================================================
+
+    return json(
+      {
+        success:
+          false,
+
+        error:
+          "Method not allowed"
+      },
+      405
+    );
+  }
+};
+
+
+// ============================================================
+// RECEIVE EVENT
+// ============================================================
+
+async function receiveEvent(
+  request,
+  env
+) {
+  // ==========================================================
+  // CHECK ENVIRONMENT VARIABLES
+  // ==========================================================
+
+  if (
+    !env.SUPABASE_URL
+  ) {
+    console.error(
+      "REPORTLI ERROR: SUPABASE_URL is missing"
+    );
+
+    return json(
+      {
+        success:
+          false,
+
+        error:
+          "SUPABASE_URL is missing"
+      },
+      500
+    );
+  }
+
+  if (
+    !env.SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    console.error(
+      "REPORTLI ERROR: SUPABASE_SERVICE_ROLE_KEY is missing"
+    );
+
+    return json(
+      {
+        success:
+          false,
+
+        error:
+          "SUPABASE_SERVICE_ROLE_KEY is missing"
+      },
+      500
+    );
+  }
+
+  // ==========================================================
+  // READ BODY
+  // ==========================================================
+
+  let rawBody;
+
+  try {
+    rawBody =
+      await request.text();
+  } catch (error) {
+    console.error(
+      "Could not read body:",
+      error
+    );
+
+    return json(
+      {
+        success:
+          false,
+
+        error:
+          "Could not read request body"
+      },
+      400
+    );
+  }
+
+  if (
+    !rawBody
+  ) {
+    return json(
+      {
+        success:
+          false,
+
+        error:
+          "Empty request body"
+      },
+      400
+    );
+  }
+
+  // ==========================================================
+  // PARSE JSON
+  // ==========================================================
+
+  let body;
+
+  try {
+    body =
+      JSON.parse(
+        rawBody
+      );
+  } catch (error) {
+    console.error(
+      "Invalid JSON:",
+      rawBody
+    );
+
+    return json(
+      {
+        success:
+          false,
+
+        error:
+          "Invalid JSON"
+      },
+      400
+    );
+  }
+
+  console.log(
+    "REPORTLI EVENT:",
+    JSON.stringify(
+      body
+    )
+  );
+
+  // ==========================================================
+  // API KEY
+  // ==========================================================
+
+  const headerApiKey =
+    request.headers.get(
+      "x-api-key"
+    );
+
+  const bodyApiKey =
+    body.api_key ||
+    body.apiKey ||
+    null;
+
+  const apiKey =
+    headerApiKey ||
+    bodyApiKey;
+
+  if (
+    !apiKey
+  ) {
+    console.error(
+      "Missing API key"
+    );
+
+    return json(
+      {
+        success:
+          false,
+
+        error:
+          "Missing API key"
+      },
+      401
+    );
+  }
+
+  // ==========================================================
+  // BATCH COMPATIBILITY
+  // ==========================================================
+
+  if (
+    body.type ===
+      "BATCH" &&
+    Array.isArray(
+      body.events
+    )
+  ) {
+    console.log(
+      "Legacy batch received:",
+      body.events.length
+    );
+
+    const results =
+      [];
+
+    for (
+      const event of
+        body.events
     ) {
-      return json(
-        {
-          success:
-            false,
+      const result =
+        await processEvent(
+          event,
+          apiKey,
+          env
+        );
 
-          error:
-            result.error,
-
-          details:
-            result.details ||
-            null
-        },
-        500
+      results.push(
+        result
       );
     }
 
-    return json({
+    const failed =
+      results.filter(
+        function (result) {
+          return !result.success;
+        }
+      );
+
+    return json(
+      {
+        success:
+          failed.length ===
+          0,
+
+        processed:
+          results.length,
+
+        failed:
+          failed.length,
+
+        results:
+          results
+      },
+      failed.length
+        ? 500
+        : 200
+    );
+  }
+
+  // ==========================================================
+  // SINGLE EVENT
+  // ==========================================================
+
+  const result =
+    await processEvent(
+      body,
+      apiKey,
+      env
+    );
+
+  if (
+    !result.success
+  ) {
+    return json(
+      {
+        success:
+          false,
+
+        error:
+          result.error,
+
+        details:
+          result.details ||
+          null
+      },
+      500
+    );
+  }
+
+  return json(
+    {
       success:
         true,
 
@@ -1438,13 +1903,14 @@ export default {
 
       type:
         body.type ||
-        null
-    });
-  }
-};
+        "UNKNOWN"
+    }
+  );
+}
+
 
 // ============================================================
-// EVENT PROCESSOR
+// PROCESS EVENT
 // ============================================================
 
 async function processEvent(
@@ -1462,7 +1928,7 @@ async function processEvent(
         false,
 
       error:
-        "Invalid event"
+        "Invalid event object"
     };
   }
 
@@ -1473,14 +1939,28 @@ async function processEvent(
 
   const sessionId =
     event.session_id ||
+    event.sessionId ||
     null;
 
-  // ----------------------------------------------------------
-  // ERROR EVENT
-  // ----------------------------------------------------------
+  const type =
+    String(
+      event.type ||
+      ""
+    ).toUpperCase();
+
+  console.log(
+    "Processing:",
+    type,
+    "session:",
+    sessionId
+  );
+
+  // ==========================================================
+  // ERROR
+  // ==========================================================
 
   if (
-    event.type ===
+    type ===
     "ERROR"
   ) {
     return await saveError(
@@ -1491,9 +1971,9 @@ async function processEvent(
     );
   }
 
-  // ----------------------------------------------------------
-  // USER ACTIVITY / SESSION EVENTS
-  // ----------------------------------------------------------
+  // ==========================================================
+  // EVERYTHING ELSE = ACTIVITY
+  // ==========================================================
 
   return await saveActivity(
     event,
@@ -1502,6 +1982,7 @@ async function processEvent(
     env
   );
 }
+
 
 // ============================================================
 // SAVE ACTIVITY
@@ -1513,64 +1994,116 @@ async function saveActivity(
   sessionId,
   env
 ) {
-  const response =
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/user_activity`,
-      {
-        method:
-          "POST",
+  const row = {
+    api_key:
+      apiKey,
 
-        headers: {
-          "Content-Type":
-            "application/json",
+    session_id:
+      sessionId,
 
-          "apikey":
-            env.SUPABASE_SERVICE_ROLE_KEY,
+    event:
+      event
+  };
 
-          "Authorization":
-            `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+  console.log(
+    "SUPABASE user_activity INSERT:",
+    JSON.stringify(
+      row
+    )
+  );
 
-          "Prefer":
-            "return=minimal"
-        },
+  let response;
 
-        body:
-          JSON.stringify({
-            api_key:
-              apiKey,
+  try {
+    response =
+      await fetch(
+        buildSupabaseUrl(
+          env.SUPABASE_URL,
+          "user_activity"
+        ),
+        {
+          method:
+            "POST",
 
-            session_id:
-              sessionId,
+          headers: {
+            "Content-Type":
+              "application/json",
 
-            event:
-              event
-          })
-      }
+            "apikey":
+              env.SUPABASE_SERVICE_ROLE_KEY,
+
+            "Authorization":
+              "Bearer " +
+              env.SUPABASE_SERVICE_ROLE_KEY,
+
+            "Prefer":
+              "return=minimal"
+          },
+
+          body:
+            JSON.stringify(
+              row
+            )
+        }
+      );
+  } catch (error) {
+    console.error(
+      "SUPABASE NETWORK ERROR:",
+      error
     );
-
-  if (
-    !response.ok
-  ) {
-    const errorText =
-      await response.text();
 
     return {
       success:
         false,
 
       error:
-        "Activity database insert failed",
+        "Supabase request failed",
 
       details:
-        errorText
+        error &&
+        error.message
+          ? error.message
+          : String(error)
     };
   }
 
+  const responseText =
+    await response.text();
+
+  if (
+    !response.ok
+  ) {
+    console.error(
+      "SUPABASE user_activity FAILED",
+      response.status,
+      responseText
+    );
+
+    return {
+      success:
+        false,
+
+      error:
+        "user_activity insert failed",
+
+      details:
+        responseText
+    };
+  }
+
+  console.log(
+    "SUPABASE user_activity SUCCESS"
+  );
+
   return {
     success:
-      true
+      true,
+
+    table:
+      "user_activity"
   };
 }
+
 
 // ============================================================
 // SAVE ERROR
@@ -1587,7 +2120,7 @@ async function saveError(
       ? String(
           event.message
         )
-      : "";
+      : "Unknown error";
 
   const stackTrace =
     event.stack != null
@@ -1608,15 +2141,21 @@ async function saveError(
         )
       : null;
 
+  const columnNumber =
+    event.column_number !=
+    null
+      ? Number(
+          event.column_number
+        )
+      : null;
+
   const errorTime =
     event.time ||
     new Date().toISOString();
 
-  // ----------------------------------------------------------
-  // EXACT ERROR DATA
-  //
-  // Stored inside errors.ai_analysis
-  // ----------------------------------------------------------
+  // ==========================================================
+  // AI ANALYSIS JSON
+  // ==========================================================
 
   const aiAnalysis = {
     error_message:
@@ -1637,62 +2176,142 @@ async function saveError(
     line_number:
       lineNumber,
 
+    column_number:
+      columnNumber,
+
     stack_trace:
-      stackTrace
+      stackTrace,
+
+    context:
+      event.context ||
+      "auto"
   };
 
-  const response =
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/errors`,
-      {
-        method:
-          "POST",
+  const row = {
+    ai_analysis:
+      aiAnalysis
+  };
 
-        headers: {
-          "Content-Type":
-            "application/json",
+  console.log(
+    "SUPABASE errors INSERT:",
+    JSON.stringify(
+      row
+    )
+  );
 
-          "apikey":
-            env.SUPABASE_SERVICE_ROLE_KEY,
+  let response;
 
-          "Authorization":
-            `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+  try {
+    response =
+      await fetch(
+        buildSupabaseUrl(
+          env.SUPABASE_URL,
+          "errors"
+        ),
+        {
+          method:
+            "POST",
 
-          "Prefer":
-            "return=minimal"
-        },
+          headers: {
+            "Content-Type":
+              "application/json",
 
-        body:
-          JSON.stringify({
-            ai_analysis:
-              aiAnalysis
-          })
-      }
+            "apikey":
+              env.SUPABASE_SERVICE_ROLE_KEY,
+
+            "Authorization":
+              "Bearer " +
+              env.SUPABASE_SERVICE_ROLE_KEY,
+
+            "Prefer":
+              "return=minimal"
+          },
+
+          body:
+            JSON.stringify(
+              row
+            )
+        }
+      );
+  } catch (error) {
+    console.error(
+      "SUPABASE ERROR NETWORK FAILURE:",
+      error
     );
-
-  if (
-    !response.ok
-  ) {
-    const errorText =
-      await response.text();
 
     return {
       success:
         false,
 
       error:
-        "Error database insert failed",
+        "Supabase error request failed",
 
       details:
-        errorText
+        error &&
+        error.message
+          ? error.message
+          : String(error)
     };
   }
 
+  const responseText =
+    await response.text();
+
+  if (
+    !response.ok
+  ) {
+    console.error(
+      "SUPABASE errors FAILED:",
+      response.status,
+      responseText
+    );
+
+    return {
+      success:
+        false,
+
+      error:
+        "errors insert failed",
+
+      details:
+        responseText
+    };
+  }
+
+  console.log(
+    "SUPABASE errors SUCCESS"
+  );
+
   return {
     success:
-      true
+      true,
+
+    table:
+      "errors"
   };
 }
+
+
+// ============================================================
+// BUILD SUPABASE URL
+// ============================================================
+
+function buildSupabaseUrl(
+  baseUrl,
+  table
+) {
+  return (
+    String(
+      baseUrl
+    ).replace(
+      /\/+$/,
+      ""
+    ) +
+    "/rest/v1/" +
+    table
+  );
+}
+
 
 // ============================================================
 // CORS
@@ -1707,9 +2326,13 @@ function corsHeaders() {
       "GET, POST, OPTIONS",
 
     "Access-Control-Allow-Headers":
-      "Content-Type, x-api-key"
+      "Content-Type, x-api-key",
+
+    "Access-Control-Max-Age":
+      "86400"
   };
 }
+
 
 // ============================================================
 // JSON RESPONSE
@@ -1725,15 +2348,14 @@ function json(
     ),
     {
       status:
-
         status,
 
       headers: {
         "Content-Type":
-          "application/json",
+          "application/json; charset=UTF-8",
 
         ...corsHeaders()
       }
     }
   );
-  }
+}
