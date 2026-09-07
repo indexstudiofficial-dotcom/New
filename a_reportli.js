@@ -1,298 +1,182 @@
-/**
- * ============================================================
- * REPORTLI AI
- * SINGLE CLOUDFLARE WORKER
- * ============================================================
- *
- * GET  /              -> health check
- * GET  /reportli.js   -> Reportli SDK
- * POST /              -> receives SDK events
- * OPTIONS             -> CORS
- *
- * Required Cloudflare Worker secrets:
- *
- * SUPABASE_URL
- * SUPABASE_SERVICE_ROLE_KEY
- *
- * IMPORTANT:
- * Never put the Supabase service-role key inside REPORTLI_JS.
- * The service-role key exists only on the Cloudflare Worker.
- */
+const SUPABASE_URL = env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
+
+/*
+|--------------------------------------------------------------------------
+| CONFIG
+|--------------------------------------------------------------------------
+*/
+
+const WORKER_URL = "https://reportliai-sbs.reportliaihq.workers.dev";
+
+/*
+|--------------------------------------------------------------------------
+| REPORTLI BROWSER SDK
+|--------------------------------------------------------------------------
+*/
 
 const REPORTLI_JS = String.raw`
-/**
- * ============================================================
- * REPORTLI AI - BROWSER SDK
- * ============================================================
- */
-
 (function () {
   "use strict";
 
-  // ============================================================
-  // CONFIG
-  // ============================================================
-
-  var WORKER_URL =
-    "https://reportliai-sbs.reportliaihq.workers.dev";
-
-  // ============================================================
-  // FIND SCRIPT
-  // ============================================================
-
-  function findOwnScriptTag() {
-    try {
-      if (
-        document.currentScript &&
-        document.currentScript.getAttribute("data-key")
-      ) {
-        return document.currentScript;
-      }
-
-      var scripts =
-        document.getElementsByTagName("script");
-
-      for (
-        var i = scripts.length - 1;
-        i >= 0;
-        i--
-      ) {
-        var script =
-          scripts[i];
-
-        var src =
-          script.getAttribute("src") || "";
-
-        if (
-          (
-            src.indexOf("reportli.js") !== -1 ||
-            src.indexOf("a_reportli.js") !== -1
-          ) &&
-          script.getAttribute("data-key")
-        ) {
-          return script;
-        }
-      }
-    } catch (e) {}
-
-    return null;
-  }
-
-  var scriptTag =
-    findOwnScriptTag();
-
-  var API_KEY =
-    scriptTag
-      ? scriptTag.getAttribute("data-key")
-      : null;
-
-  if (!API_KEY) {
-    console.warn(
-      "Reportli: data-key is missing."
-    );
-
+  if (window.__REPORTLI_LOADED__) {
     return;
   }
 
-  // ============================================================
-  // SESSION
-  // ============================================================
+  window.__REPORTLI_LOADED__ = true;
 
-  var sessionId =
+  var WORKER_URL = "${WORKER_URL}";
+
+  /*
+  |--------------------------------------------------------------------------
+  | FIND API KEY
+  |--------------------------------------------------------------------------
+  */
+
+  function getApiKey() {
+    try {
+      var current = document.currentScript;
+
+      if (current) {
+        var key = current.getAttribute("data-key");
+
+        if (key) {
+          return key;
+        }
+      }
+
+      var scripts = document.getElementsByTagName("script");
+
+      for (var i = 0; i < scripts.length; i++) {
+        var src = scripts[i].src || "";
+
+        if (
+          src.indexOf("reportli.js") !== -1 ||
+          src.indexOf("a_reportli.js") !== -1
+        ) {
+          var scriptKey = scripts[i].getAttribute("data-key");
+
+          if (scriptKey) {
+            return scriptKey;
+          }
+        }
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  var API_KEY = getApiKey();
+
+  /*
+  |--------------------------------------------------------------------------
+  | SESSION
+  |--------------------------------------------------------------------------
+  */
+
+  var SESSION_ID =
     "sess_" +
-    Math.random()
-      .toString(36)
-      .slice(2) +
+    Math.random().toString(36).substring(2) +
     "_" +
-    Date.now().toString(36);
+    Date.now();
 
-  var sessionStartedAt =
-    new Date().toISOString();
+  var SESSION_STARTED_AT = Date.now();
 
-  var initialized =
-    false;
-
-  var sessionEnded =
-    false;
-
-  var pageViews =
-    0;
-
-  var clickCount =
-    0;
-
-  // ============================================================
-  // USER
-  // ============================================================
-
-  var user = {
-    email: "anonymous",
-    userId: "anonymous"
-  };
+  /*
+  |--------------------------------------------------------------------------
+  | USER
+  |--------------------------------------------------------------------------
+  */
 
   function detectUser() {
-    var detected = {
-      email: "anonymous",
-      userId: "anonymous"
+    try {
+      if (window.reportliUser) {
+        return {
+          email: window.reportliUser.email || null,
+          user_id: window.reportliUser.userId || null
+        };
+      }
+    } catch (e) {}
+
+    return {
+      email: null,
+      user_id: null
     };
-
-    try {
-      if (
-        window.reportliUser &&
-        typeof window.reportliUser === "object"
-      ) {
-        if (
-          window.reportliUser.email
-        ) {
-          detected.email =
-            String(
-              window.reportliUser.email
-            );
-        }
-
-        if (
-          window.reportliUser.userId
-        ) {
-          detected.userId =
-            String(
-              window.reportliUser.userId
-            );
-        }
-      }
-    } catch (e) {}
-
-    return detected;
   }
 
-  function refreshUser() {
-    try {
-      var detected =
-        detectUser();
-
-      if (
-        detected.email &&
-        detected.email !== "anonymous"
-      ) {
-        user.email =
-          detected.email;
-      }
-
-      if (
-        detected.userId &&
-        detected.userId !== "anonymous"
-      ) {
-        user.userId =
-          detected.userId;
-      }
-    } catch (e) {}
-  }
-
-  // ============================================================
-  // HELPERS
-  // ============================================================
-
-  function nowISO() {
-    return new Date().toISOString();
-  }
-
-  function getPage() {
-    try {
-      return (
-        window.location.pathname +
-        window.location.search +
-        window.location.hash
-      );
-    } catch (e) {
-      return "unknown";
-    }
-  }
-
-  function getDomain() {
-    try {
-      return window.location.hostname;
-    } catch (e) {
-      return "unknown";
-    }
-  }
+  /*
+  |--------------------------------------------------------------------------
+  | BROWSER
+  |--------------------------------------------------------------------------
+  */
 
   function getBrowser() {
     try {
-      return navigator.userAgent;
+      return navigator.userAgent || "unknown";
     } catch (e) {
       return "unknown";
     }
   }
 
-  function getBaseFields() {
-    refreshUser();
+  /*
+  |--------------------------------------------------------------------------
+  | BASE EVENT
+  |--------------------------------------------------------------------------
+  */
+
+  function baseFields() {
+    var user = detectUser();
 
     return {
-      api_key:
-        API_KEY,
-
-      domain:
-        getDomain(),
-
-      session_id:
-        sessionId,
-
-      email:
-        user.email,
-
-      user_id:
-        user.userId,
-
-      page:
-        getPage(),
-
-      browser:
-        getBrowser(),
-
-      time:
-        nowISO()
+      api_key: API_KEY,
+      session_id: SESSION_ID,
+      domain: window.location.hostname,
+      page: window.location.href,
+      browser: getBrowser(),
+      email: user.email,
+      user_id: user.user_id,
+      time: new Date().toISOString()
     };
   }
 
-  // ============================================================
-  // SEND
-  //
-  // Every event is sent immediately.
-  // No queue.
-  // No 2-second delay.
-  // No batching for new SDK events.
-  // ============================================================
+  /*
+  |--------------------------------------------------------------------------
+  | SEND EVENT
+  |--------------------------------------------------------------------------
+  */
 
-  function send(
-    payload,
-    useBeacon
-  ) {
+  function send(payload, useBeacon) {
+    if (!API_KEY) {
+      return;
+    }
+
     try {
-      var body =
-        JSON.stringify(payload);
+      var body = JSON.stringify(payload);
 
-      // --------------------------------------------------------
-      // PAGE UNLOAD
-      // --------------------------------------------------------
+      /*
+      |--------------------------------------------------------------------------
+      | BEACON
+      |--------------------------------------------------------------------------
+      */
 
       if (
         useBeacon &&
         navigator.sendBeacon
       ) {
         try {
-          var blob =
-            new Blob(
-              [body],
-              {
-                type:
-                  "application/json"
-              }
-            );
+          var blob = new Blob(
+            [body],
+            {
+              type: "application/json"
+            }
+          );
 
-          var sent =
-            navigator.sendBeacon(
-              WORKER_URL,
-              blob
-            );
+          var sent = navigator.sendBeacon(
+            WORKER_URL,
+            blob
+          );
 
           if (sent) {
             return;
@@ -300,653 +184,621 @@ const REPORTLI_JS = String.raw`
         } catch (e) {}
       }
 
-      // --------------------------------------------------------
-      // NORMAL REQUEST
-      // --------------------------------------------------------
+      /*
+      |--------------------------------------------------------------------------
+      | FETCH
+      |--------------------------------------------------------------------------
+      */
 
-      fetch(
-        WORKER_URL,
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            "x-api-key":
-              API_KEY
-          },
-
-          body:
-            body,
-
-          keepalive:
-            true,
-
-          credentials:
-            "omit"
-        }
-      ).catch(
-        function () {}
-      );
+      fetch(WORKER_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": API_KEY
+        },
+        body: body,
+        keepalive: true
+      }).catch(function () {
+        /*
+        Intentionally ignored.
+        Never allow Reportli itself to create errors.
+        */
+      });
 
     } catch (e) {}
   }
 
-  // ============================================================
-  // CLICK LABEL
-  // ============================================================
+  /*
+  |--------------------------------------------------------------------------
+  | ACTIVITY
+  |--------------------------------------------------------------------------
+  */
 
-  function getClickableElement(
-    element
-  ) {
-    try {
-      if (
-        !element ||
-        element.nodeType !== 1
-      ) {
-        return null;
-      }
+  function track(eventName, data) {
+    var eventPayload = Object.assign(
+      {},
+      baseFields(),
+      {
+        event_name: eventName
+      },
+      data || {}
+    );
 
-      var clickable =
-        element.closest(
-          "button, a, [role='button'], input[type='button'], input[type='submit'], [onclick]"
-        );
-
-      return (
-        clickable ||
-        element
-      );
-    } catch (e) {
-      return element;
-    }
+    send({
+      type: "ACTIVITY",
+      api_key: API_KEY,
+      session_id: SESSION_ID,
+      event: eventPayload
+    });
   }
 
-  function getElementLabel(
-    element
-  ) {
+  /*
+  |--------------------------------------------------------------------------
+  | SESSION START
+  |--------------------------------------------------------------------------
+  */
+
+  track("SESSION_STARTED", {
+    started_at: new Date().toISOString()
+  });
+
+  /*
+  |--------------------------------------------------------------------------
+  | INITIAL PAGE VIEW
+  |--------------------------------------------------------------------------
+  */
+
+  track("page_view", {
+    url: window.location.href,
+    title: document.title
+  });
+
+  /*
+  |--------------------------------------------------------------------------
+  | CLICK TRACKING
+  |--------------------------------------------------------------------------
+  */
+
+  function getElementInfo(element) {
     try {
       if (!element) {
-        return "(no label)";
+        return {};
       }
 
-      var label = "";
+      var tag = element.tagName
+        ? element.tagName.toLowerCase()
+        : null;
 
-      // Text
-      label =
-        element.innerText ||
-        element.textContent ||
-        "";
+      var text = "";
 
-      label =
-        String(label)
-          .replace(
-            /\s+/g,
-            " "
-          )
-          .trim();
+      try {
+        text = (
+          element.innerText ||
+          element.textContent ||
+          ""
+        )
+          .trim()
+          .replace(/\s+/g, " ")
+          .substring(0, 200);
+      } catch (e) {}
 
-      // aria-label
-      if (!label) {
-        label =
-          element.getAttribute(
-            "aria-label"
-          ) || "";
-      }
+      var id = element.id || null;
 
-      // title
-      if (!label) {
-        label =
-          element.getAttribute(
-            "title"
-          ) || "";
-      }
+      var className = null;
 
-      // value
-      if (!label) {
-        label =
-          element.getAttribute(
-            "value"
-          ) || "";
-      }
+      try {
+        className =
+          typeof element.className === "string"
+            ? element.className
+            : null;
+      } catch (e) {}
 
-      // placeholder
-      if (!label) {
-        label =
-          element.getAttribute(
-            "placeholder"
-          ) || "";
-      }
+      var href = null;
 
-      // name
-      if (!label) {
-        label =
-          element.getAttribute(
-            "name"
-          ) || "";
-      }
+      try {
+        href = element.href || null;
+      } catch (e) {}
 
-      // id
-      if (!label) {
-        label =
-          element.getAttribute(
-            "id"
-          ) || "";
-      }
+      var name = null;
 
-      label =
-        String(label)
-          .replace(
-            /\s+/g,
-            " "
-          )
-          .trim();
+      try {
+        name = element.getAttribute("name");
+      } catch (e) {}
 
-      return (
-        label
-          ? label.slice(0, 200)
-          : "(no label)"
-      );
+      var ariaLabel = null;
+
+      try {
+        ariaLabel = element.getAttribute("aria-label");
+      } catch (e) {}
+
+      var value = null;
+
+      try {
+        value = element.value || null;
+      } catch (e) {}
+
+      return {
+        tag: tag,
+        text: text,
+        id: id,
+        class_name: className,
+        href: href,
+        name: name,
+        aria_label: ariaLabel,
+        value: value
+      };
 
     } catch (e) {
-      return "(no label)";
+      return {};
     }
-  }
-
-  // ============================================================
-  // CLICK TRACKING
-  // ============================================================
-
-  function trackClick(
-    originalElement
-  ) {
-    try {
-      var element =
-        getClickableElement(
-          originalElement
-        );
-
-      clickCount++;
-
-      var tag =
-        element &&
-        element.tagName
-          ? element.tagName.toLowerCase()
-          : "unknown";
-
-      var label =
-        getElementLabel(
-          element
-        );
-
-      send(
-        Object.assign(
-          getBaseFields(),
-          {
-            type:
-              "ACTIVITY",
-
-            event:
-              "click",
-
-            element:
-              tag,
-
-            label:
-              label
-          }
-        )
-      );
-
-    } catch (e) {}
   }
 
   document.addEventListener(
     "click",
     function (event) {
       try {
-        trackClick(
-          event.target
-        );
+        var element = event.target;
+
+        if (!element) {
+          return;
+        }
+
+        /*
+        Find nearest useful clickable element.
+        */
+
+        var clickable = null;
+
+        try {
+          clickable = element.closest(
+            "button,a,input,select,textarea,[role='button'],[onclick]"
+          );
+        } catch (e) {}
+
+        clickable = clickable || element;
+
+        track("click", {
+          element: getElementInfo(clickable),
+          x: event.clientX,
+          y: event.clientY
+        });
+
       } catch (e) {}
     },
     true
   );
 
-  // ============================================================
-  // PAGE VIEW
-  // ============================================================
+  /*
+  |--------------------------------------------------------------------------
+  | SPA PAGE NAVIGATION
+  |--------------------------------------------------------------------------
+  */
 
   function trackPageView() {
     try {
-      pageViews++;
-
-      send(
-        Object.assign(
-          getBaseFields(),
-          {
-            type:
-              "ACTIVITY",
-
-            event:
-              "page_view"
-          }
-        )
-      );
-
+      track("page_view", {
+        url: window.location.href,
+        title: document.title
+      });
     } catch (e) {}
   }
 
-  // ============================================================
-  // SPA NAVIGATION
-  // ============================================================
+  var originalPushState = history.pushState;
 
-  var currentPath =
-    getPage();
+  history.pushState = function () {
+    var result = originalPushState.apply(
+      history,
+      arguments
+    );
 
-  function handleUrlChange() {
-    try {
-      var newPath =
-        getPage();
+    setTimeout(trackPageView, 0);
 
-      if (
-        newPath === currentPath
-      ) {
-        return;
-      }
+    return result;
+  };
 
-      var previousPath =
-        currentPath;
+  var originalReplaceState = history.replaceState;
 
-      currentPath =
-        newPath;
+  history.replaceState = function () {
+    var result = originalReplaceState.apply(
+      history,
+      arguments
+    );
 
-      send(
-        Object.assign(
-          getBaseFields(),
-          {
-            type:
-              "ACTIVITY",
+    setTimeout(trackPageView, 0);
 
-            event:
-              "navigation",
+    return result;
+  };
 
-            from:
-              previousPath,
+  window.addEventListener(
+    "popstate",
+    trackPageView
+  );
 
-            to:
-              newPath
-          }
-        )
-      );
+  window.addEventListener(
+    "hashchange",
+    trackPageView
+  );
 
-      trackPageView();
+  /*
+  |--------------------------------------------------------------------------
+  | ERROR DEDUPLICATION
+  |--------------------------------------------------------------------------
+  */
 
-    } catch (e) {}
+  var recentErrors = {};
+
+  function getErrorSignature(
+    message,
+    stack,
+    fileName,
+    lineNumber
+  ) {
+    return [
+      message || "",
+      stack || "",
+      fileName || "",
+      lineNumber || ""
+    ].join("|");
   }
 
-  try {
-    var originalPushState =
-      history.pushState;
-
-    history.pushState =
-      function () {
-        var result =
-          originalPushState.apply(
-            history,
-            arguments
-          );
-
-        handleUrlChange();
-
-        return result;
-      };
-
-    var originalReplaceState =
-      history.replaceState;
-
-    history.replaceState =
-      function () {
-        var result =
-          originalReplaceState.apply(
-            history,
-            arguments
-          );
-
-        handleUrlChange();
-
-        return result;
-      };
-
-    window.addEventListener(
-      "popstate",
-      handleUrlChange
-    );
-
-    window.addEventListener(
-      "hashchange",
-      handleUrlChange
-    );
-
-  } catch (e) {}
-
-  // ============================================================
-  // ERROR LOCATION
-  // ============================================================
-
-  function cleanFileName(
-    value
+  function shouldReportError(
+    message,
+    stack,
+    fileName,
+    lineNumber
   ) {
     try {
-      if (!value) {
+      var signature = getErrorSignature(
+        message,
+        stack,
+        fileName,
+        lineNumber
+      );
+
+      var now = Date.now();
+
+      if (
+        recentErrors[signature] &&
+        now - recentErrors[signature] < 2000
+      ) {
+        return false;
+      }
+
+      recentErrors[signature] = now;
+
+      /*
+      Clean old signatures.
+      */
+
+      Object.keys(recentErrors).forEach(
+        function (key) {
+          if (
+            now - recentErrors[key] > 10000
+          ) {
+            delete recentErrors[key];
+          }
+        }
+      );
+
+      return true;
+
+    } catch (e) {
+      return true;
+    }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | ERROR CONVERSION
+  |--------------------------------------------------------------------------
+  */
+
+  function getErrorMessage(error) {
+    try {
+      if (!error) {
+        return "Unknown error";
+      }
+
+      if (typeof error === "string") {
+        return error;
+      }
+
+      if (error.message) {
+        return String(error.message);
+      }
+
+      try {
+        return JSON.stringify(error);
+      } catch (e) {
+        return String(error);
+      }
+
+    } catch (e) {
+      return "Unknown error";
+    }
+  }
+
+  function getErrorStack(error) {
+    try {
+      if (!error) {
         return null;
       }
 
-      var fileName =
-        String(value);
-
-      // URL
-      if (
-        fileName.indexOf(
-          "http://"
-        ) === 0 ||
-        fileName.indexOf(
-          "https://"
-        ) === 0
-      ) {
-        try {
-          var parsed =
-            new URL(
-              fileName
-            );
-
-          var pathname =
-            parsed.pathname;
-
-          var parts =
-            pathname
-              .split("/")
-              .filter(
-                function (part) {
-                  return part;
-                }
-              );
-
-          if (
-            parts.length
-          ) {
-            return parts[
-              parts.length - 1
-            ];
-          }
-        } catch (e) {}
+      if (error.stack) {
+        return String(error.stack);
       }
 
-      return fileName;
+      return null;
 
     } catch (e) {
       return null;
     }
   }
 
-  function extractErrorLocation(
-    error
-  ) {
-    var fileName =
-      null;
-
-    var lineNumber =
-      null;
-
-    var columnNumber =
-      null;
-
+  function getErrorLocation(error) {
     try {
-      if (
-        error &&
-        error.filename
-      ) {
-        fileName =
-          error.filename;
+      if (!error) {
+        return {};
       }
 
-      if (
-        error &&
-        error.lineno != null
-      ) {
-        lineNumber =
-          Number(
-            error.lineno
-          );
-      }
+      return {
+        file_name:
+          error.fileName ||
+          error.filename ||
+          null,
 
-      if (
-        error &&
-        error.colno != null
-      ) {
-        columnNumber =
-          Number(
-            error.colno
-          );
-      }
+        line_number:
+          error.lineNumber ||
+          error.lineno ||
+          null,
 
-      // --------------------------------------------------------
-      // STACK PARSING
-      // --------------------------------------------------------
+        column_number:
+          error.columnNumber ||
+          error.colno ||
+          null
+      };
 
-      if (
-        error &&
-        error.stack
-      ) {
-        var stack =
-          String(
-            error.stack
-          );
-
-        var match =
-          stack.match(
-            /(?:at\s+.*?\s+\()?((?:https?:\/\/|webpack:\/\/|file:\/\/\/|\/)[^\s\):]+):(\d+)(?::(\d+))?\)?/
-          );
-
-        if (match) {
-          if (!fileName) {
-            fileName =
-              match[1];
-          }
-
-          if (
-            lineNumber == null
-          ) {
-            lineNumber =
-              Number(
-                match[2]
-              );
-          }
-
-          if (
-            columnNumber == null &&
-            match[3]
-          ) {
-            columnNumber =
-              Number(
-                match[3]
-              );
-          }
-        }
-      }
-
-    } catch (e) {}
-
-    return {
-      file_name:
-        cleanFileName(
-          fileName
-        ),
-
-      line_number:
-        lineNumber,
-
-      column_number:
-        columnNumber
-    };
+    } catch (e) {
+      return {};
+    }
   }
 
-  // ============================================================
-  // ERROR TRACKING
-  // ============================================================
+  /*
+  |--------------------------------------------------------------------------
+  | CORE ERROR TRACKER
+  |--------------------------------------------------------------------------
+  */
 
   function trackError(
     error,
-    context
+    context,
+    extra
   ) {
     try {
-      var message =
-        "Unknown error";
+      var message = getErrorMessage(error);
+
+      var stack = getErrorStack(error);
+
+      var location = getErrorLocation(error);
+
+      /*
+      Extra location information supplied
+      by window.onerror.
+      */
 
       if (
-        error &&
-        error.message != null
+        extra &&
+        extra.file_name
       ) {
-        message =
-          String(
-            error.message
-          );
-      } else if (
-        error != null
-      ) {
-        message =
-          String(error);
+        location.file_name =
+          extra.file_name;
       }
-
-      var stack =
-        "";
 
       if (
-        error &&
-        error.stack
+        extra &&
+        extra.line_number
       ) {
-        stack =
-          String(
-            error.stack
-          );
+        location.line_number =
+          extra.line_number;
       }
 
-      var location =
-        extractErrorLocation(
-          error
+      if (
+        extra &&
+        extra.column_number
+      ) {
+        location.column_number =
+          extra.column_number;
+      }
+
+      /*
+      Deduplicate.
+      */
+
+      if (
+        !shouldReportError(
+          message,
+          stack,
+          location.file_name,
+          location.line_number
+        )
+      ) {
+        return;
+      }
+
+      var payload = {
+        type: "ERROR",
+
+        api_key: API_KEY,
+
+        session_id: SESSION_ID,
+
+        error_message: message,
+
+        timestamp: new Date().toISOString(),
+
+        file_name:
+          location.file_name || null,
+
+        line_number:
+          location.line_number || null,
+
+        column_number:
+          location.column_number || null,
+
+        stack_trace: stack,
+
+        context:
+          context || "unknown",
+
+        page: window.location.href,
+
+        domain: window.location.hostname,
+
+        browser: getBrowser()
+      };
+
+      /*
+      Include extra information when available.
+      */
+
+      if (extra) {
+        try {
+          payload.extra = extra;
+        } catch (e) {}
+      }
+
+      /*
+      IMPORTANT:
+      Send immediately.
+      */
+
+      send(payload);
+
+    } catch (e) {
+      /*
+      Never let Reportli create an error.
+      */
+    }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | window.onerror
+  |--------------------------------------------------------------------------
+  |
+  | This catches normal JavaScript runtime errors.
+  |
+  */
+
+  window.onerror = function (
+    message,
+    source,
+    lineno,
+    colno,
+    error
+  ) {
+    try {
+      var actualError =
+        error ||
+        new Error(
+          typeof message === "string"
+            ? message
+            : "JavaScript error"
         );
 
-      send(
-        Object.assign(
-          getBaseFields(),
-          {
-            type:
-              "ERROR",
-
-            message:
-              message,
-
-            stack:
-              stack,
-
-            file_name:
-              location.file_name,
-
-            line_number:
-              location.line_number,
-
-            column_number:
-              location.column_number,
-
-            context:
-              context ||
-              "auto"
-          }
-        )
+      trackError(
+        actualError,
+        "window.onerror",
+        {
+          file_name: source || null,
+          line_number: lineno || null,
+          column_number: colno || null
+        }
       );
 
     } catch (e) {}
-  }
 
-  // ============================================================
-  // WINDOW ERROR
-  // ============================================================
+    /*
+    Return false so the browser
+    keeps normal error behavior.
+    */
+
+    return false;
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | ERROR EVENT
+  |--------------------------------------------------------------------------
+  */
 
   window.addEventListener(
     "error",
     function (event) {
       try {
-        if (
-          event.error
-        ) {
-          if (
-            !event.error.filename &&
-            event.filename
-          ) {
-            try {
-              event.error.filename =
-                event.filename;
-            } catch (e) {}
-          }
+        /*
+        Runtime JS error.
+        */
 
-          if (
-            event.error.lineno == null &&
-            event.lineno != null
-          ) {
-            try {
-              event.error.lineno =
-                event.lineno;
-            } catch (e) {}
-          }
-
-          if (
-            event.error.colno == null &&
-            event.colno != null
-          ) {
-            try {
-              event.error.colno =
-                event.colno;
-            } catch (e) {}
-          }
-
+        if (event.error) {
           trackError(
             event.error,
-            "window"
+            "window.error",
+            {
+              file_name:
+                event.filename || null,
+
+              line_number:
+                event.lineno || null,
+
+              column_number:
+                event.colno || null
+            }
           );
 
-        } else {
+          return;
+        }
+
+        /*
+        Resource loading error.
+        */
+
+        var target = event.target;
+
+        if (
+          target &&
+          target !== window &&
+          target !== document
+        ) {
+          var resourceUrl = null;
+
+          try {
+            resourceUrl =
+              target.src ||
+              target.href ||
+              null;
+          } catch (e) {}
+
+          var resourceName =
+            target.tagName
+              ? target.tagName.toLowerCase()
+              : "resource";
+
           trackError(
+            new Error(
+              "Failed to load " +
+              resourceName +
+              (
+                resourceUrl
+                  ? ": " + resourceUrl
+                  : ""
+              )
+            ),
+            "resource.error",
             {
-              message:
-                event.message ||
-                "Unknown window error",
-
-              stack:
-                event.filename
-                  ? (
-                      "at " +
-                      event.filename +
-                      ":" +
-                      event.lineno +
-                      ":" +
-                      event.colno
-                    )
-                  : "",
-
-              filename:
-                event.filename ||
-                null,
-
-              lineno:
-                event.lineno ||
-                null,
-
-              colno:
-                event.colno ||
-                null
-            },
-            "window"
+              resource_url: resourceUrl,
+              resource_type: resourceName
+            }
           );
         }
 
@@ -955,374 +807,369 @@ const REPORTLI_JS = String.raw`
     true
   );
 
-  // ============================================================
-  // UNHANDLED PROMISE REJECTION
-  // ============================================================
+  /*
+  |--------------------------------------------------------------------------
+  | UNHANDLED PROMISE REJECTION
+  |--------------------------------------------------------------------------
+  */
 
   window.addEventListener(
     "unhandledrejection",
     function (event) {
       try {
-        var reason =
-          event.reason;
+        var reason = event.reason;
 
-        if (
-          reason instanceof Error
-        ) {
+        if (reason instanceof Error) {
           trackError(
             reason,
             "unhandledrejection"
           );
-        } else {
-          trackError(
-            {
-              message:
-                reason != null
-                  ? String(reason)
-                  : "Unhandled Promise Rejection",
 
-              stack:
-                ""
-            },
-            "unhandledrejection"
-          );
+          return;
         }
 
+        /*
+        Promise rejected with a string,
+        object, number, etc.
+        */
+
+        var message;
+
+        try {
+          if (
+            typeof reason === "string"
+          ) {
+            message = reason;
+          } else {
+            message =
+              JSON.stringify(reason);
+          }
+        } catch (e) {
+          message = String(reason);
+        }
+
+        trackError(
+          new Error(
+            message ||
+            "Unhandled promise rejection"
+          ),
+          "unhandledrejection"
+        );
+
       } catch (e) {}
-    }
+    },
+    true
   );
 
-  // ============================================================
-  // FETCH MONITORING
-  // ============================================================
+  /*
+  |--------------------------------------------------------------------------
+  | FETCH INTERCEPTION
+  |--------------------------------------------------------------------------
+  */
 
-  try {
-    var originalFetch =
-      window.fetch;
+  if (window.fetch) {
+    var originalFetch = window.fetch;
 
-    if (
-      typeof originalFetch ===
-      "function"
-    ) {
-      window.fetch =
-        function () {
-          var args =
-            arguments;
+    window.fetch = function () {
+      var args = arguments;
 
-          var input =
-            args[0];
+      var requestUrl = null;
 
-          var init =
-            args[1] ||
-            {};
+      try {
+        requestUrl =
+          typeof args[0] === "string"
+            ? args[0]
+            : args[0] &&
+              args[0].url
+              ? args[0].url
+              : null;
+      } catch (e) {}
 
-          var url =
-            "";
+      /*
+      Don't monitor Reportli itself.
+      */
 
-          var method =
-            String(
-              init.method ||
-              "GET"
-            ).toUpperCase();
+      if (
+        requestUrl &&
+        requestUrl.indexOf(WORKER_URL) !== -1
+      ) {
+        return originalFetch.apply(
+          this,
+          args
+        );
+      }
 
+      return originalFetch
+        .apply(this, args)
+        .then(function (response) {
           try {
             if (
-              typeof input ===
-              "string"
+              response &&
+              response.status >= 400
             ) {
-              url =
-                input;
-            } else if (
-              input &&
-              input.url
-            ) {
-              url =
-                input.url;
+              trackError(
+                new Error(
+                  "HTTP " +
+                  response.status +
+                  " request failed: " +
+                  requestUrl
+                ),
+                "fetch.http",
+                {
+                  url: requestUrl,
+                  status:
+                    response.status,
+                  status_text:
+                    response.statusText
+                }
+              );
             }
           } catch (e) {}
 
-          // Never monitor Reportli requests.
-          if (
-            url.indexOf(
-              WORKER_URL
-            ) === 0
-          ) {
-            return originalFetch.apply(
-              window,
-              args
-            );
-          }
+          return response;
 
-          return originalFetch
-            .apply(
-              window,
-              args
-            )
-            .then(
-              function (response) {
-
-                if (
-                  !response.ok
-                ) {
-                  send(
-                    Object.assign(
-                      getBaseFields(),
-                      {
-                        type:
-                          "ERROR",
-
-                        message:
-                          "Fetch " +
-                          response.status +
-                          ": " +
-                          method +
-                          " " +
-                          url,
-
-                        stack:
-                          method +
-                          " " +
-                          url +
-                          " -> " +
-                          response.status,
-
-                        file_name:
-                          null,
-
-                        line_number:
-                          null,
-
-                        column_number:
-                          null,
-
-                        context:
-                          "fetch"
-                      }
-                    )
-                  );
-                }
-
-                return response;
-              }
-            )
-            .catch(
-              function (error) {
-
-                trackError(
-                  {
-                    message:
-                      "Fetch failed: " +
-                      method +
-                      " " +
-                      url +
-                      " - " +
-                      (
-                        error &&
-                        error.message
-                          ? error.message
-                          : "Network error"
-                      ),
-
-                    stack:
-                      error &&
-                      error.stack
-                        ? error.stack
-                        : ""
-                  },
-                  "fetch"
-                );
-
-                throw error;
-              }
-            );
-        };
-    }
-
-  } catch (e) {}
-
-  // ============================================================
-  // XHR MONITORING
-  // ============================================================
-
-  try {
-    var OriginalXHR =
-      XMLHttpRequest;
-
-    var originalOpen =
-      OriginalXHR.prototype.open;
-
-    var originalSend =
-      OriginalXHR.prototype.send;
-
-    OriginalXHR.prototype.open =
-      function (
-        method,
-        url
-      ) {
-        try {
-          this._reportliMethod =
-            String(
-              method ||
-              "GET"
-            ).toUpperCase();
-
-          this._reportliUrl =
-            String(
-              url ||
-              ""
-            );
-        } catch (e) {}
-
-        return originalOpen.apply(
-          this,
-          arguments
-        );
-      };
-
-    OriginalXHR.prototype.send =
-      function () {
-        var xhr =
-          this;
-
-        var url =
-          xhr._reportliUrl ||
-          "";
-
-        var method =
-          xhr._reportliMethod ||
-          "GET";
-
-        var shouldTrack =
-          url.indexOf(
-            WORKER_URL
-          ) !== 0;
-
-        if (
-          shouldTrack
-        ) {
+        })
+        .catch(function (error) {
           try {
-            xhr.addEventListener(
-              "loadend",
-              function () {
-                try {
-                  if (
-                    xhr.status >=
-                      400 ||
-                    xhr.status === 0
-                  ) {
-                    send(
-                      Object.assign(
-                        getBaseFields(),
-                        {
-                          type:
-                            "ERROR",
-
-                          message:
-                            "XHR " +
-                            xhr.status +
-                            ": " +
-                            method +
-                            " " +
-                            url,
-
-                          stack:
-                            method +
-                            " " +
-                            url +
-                            " -> " +
-                            xhr.status,
-
-                          file_name:
-                            null,
-
-                          line_number:
-                            null,
-
-                          column_number:
-                            null,
-
-                          context:
-                            "xhr"
-                        }
-                      )
-                    );
-                  }
-                } catch (e) {}
+            trackError(
+              error,
+              "fetch.network",
+              {
+                url: requestUrl
               }
             );
           } catch (e) {}
-        }
 
-        return originalSend.apply(
-          this,
+          throw error;
+        });
+    };
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | XHR INTERCEPTION
+  |--------------------------------------------------------------------------
+  */
+
+  if (window.XMLHttpRequest) {
+    var OriginalXHR =
+      window.XMLHttpRequest;
+
+    function ReportliXHR() {
+      var xhr =
+        new OriginalXHR();
+
+      var requestUrl = null;
+
+      var originalOpen =
+        xhr.open;
+
+      xhr.open = function (
+        method,
+        url
+      ) {
+        requestUrl = url;
+
+        return originalOpen.apply(
+          xhr,
           arguments
         );
       };
 
-  } catch (e) {}
+      xhr.addEventListener(
+        "loadend",
+        function () {
+          try {
+            /*
+            Don't monitor Reportli itself.
+            */
 
-  // ============================================================
-  // SESSION END
-  // ============================================================
+            if (
+              requestUrl &&
+              String(requestUrl).indexOf(
+                WORKER_URL
+              ) !== -1
+            ) {
+              return;
+            }
 
-  function sendSessionEnd() {
-    try {
-      if (
-        sessionEnded
+            if (
+              xhr.status >= 400
+            ) {
+              trackError(
+                new Error(
+                  "XHR HTTP " +
+                  xhr.status +
+                  " request failed: " +
+                  requestUrl
+                ),
+                "xhr.http",
+                {
+                  url: requestUrl,
+                  status: xhr.status,
+                  status_text:
+                    xhr.statusText
+                }
+              );
+
+              return;
+            }
+
+            /*
+            status 0 usually means
+            network failure / aborted request.
+            */
+
+            if (
+              xhr.status === 0 &&
+              requestUrl
+            ) {
+              trackError(
+                new Error(
+                  "XHR network request failed: " +
+                  requestUrl
+                ),
+                "xhr.network",
+                {
+                  url: requestUrl,
+                  status: 0
+                }
+              );
+            }
+
+          } catch (e) {}
+        }
+      );
+
+      return xhr;
+    }
+
+    ReportliXHR.prototype =
+      OriginalXHR.prototype;
+
+    window.XMLHttpRequest =
+      ReportliXHR;
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | MANUAL ERROR API
+  |--------------------------------------------------------------------------
+  */
+
+  function capture(
+    error,
+    context
+  ) {
+    trackError(
+      error,
+      context || "manual"
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | PUBLIC API
+  |--------------------------------------------------------------------------
+  */
+
+  window.Reportli = {
+    /*
+    Activity
+    */
+
+    track: function (
+      eventName,
+      properties
+    ) {
+      track(
+        eventName,
+        properties || {}
+      );
+    },
+
+    /*
+    Error tracking
+    */
+
+    capture: capture,
+
+    captureException:
+      function (
+        error,
+        context
       ) {
-        return;
-      }
-
-      sessionEnded =
-        true;
-
-      var endedAt =
-        nowISO();
-
-      var startTime =
-        new Date(
-          sessionStartedAt
-        ).getTime();
-
-      var endTime =
-        new Date(
-          endedAt
-        ).getTime();
-
-      var duration =
-        Math.max(
-          0,
-          Math.round(
-            (
-              endTime -
-              startTime
-            ) / 1000
-          )
+        capture(
+          error,
+          context ||
+          "captureException"
         );
+      },
+
+    /*
+    Identify user
+    */
+
+    identify: function (
+      email,
+      userId
+    ) {
+      window.reportliUser = {
+        email: email || null,
+        userId: userId || null
+      };
+
+      track("identify", {
+        email: email || null,
+        user_id: userId || null
+      });
+    },
+
+    /*
+    Session
+    */
+
+    getSessionId: function () {
+      return SESSION_ID;
+    },
+
+    getUser: function () {
+      return detectUser();
+    }
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | SESSION END
+  |--------------------------------------------------------------------------
+  */
+
+  function endSession() {
+    try {
+      var duration =
+        Date.now() -
+        SESSION_STARTED_AT;
 
       send(
-        Object.assign(
-          getBaseFields(),
-          {
-            type:
-              "SESSION_END",
+        {
+          type: "ACTIVITY",
 
-            started_at:
-              sessionStartedAt,
+          api_key: API_KEY,
 
-            ended_at:
-              endedAt,
+          session_id: SESSION_ID,
 
-            duration_seconds:
-              duration,
+          event: Object.assign(
+            {},
+            baseFields(),
+            {
+              event_name:
+                "SESSION_END",
 
-            page_views:
-              pageViews,
-
-            clicks:
-              clickCount
-          }
-        ),
+              duration_ms:
+                duration
+            }
+          )
+        },
         true
       );
 
@@ -1331,252 +1178,355 @@ const REPORTLI_JS = String.raw`
 
   window.addEventListener(
     "pagehide",
-    sendSessionEnd
+    endSession
   );
-
-  // ============================================================
-  // INITIAL SESSION
-  // ============================================================
-
-  function init() {
-    if (
-      initialized
-    ) {
-      return;
-    }
-
-    initialized =
-      true;
-
-    // ----------------------------------------------------------
-    // SESSION STARTED
-    // ----------------------------------------------------------
-
-    send(
-      Object.assign(
-        getBaseFields(),
-        {
-          type:
-            "SESSION_STARTED",
-
-          success:
-            true
-        }
-      )
-    );
-
-    // ----------------------------------------------------------
-    // INITIAL PAGE VIEW
-    // ----------------------------------------------------------
-
-    trackPageView();
-  }
-
-  // ============================================================
-  // INITIALIZE
-  // ============================================================
-
-  init();
-
-  // ============================================================
-  // PUBLIC API
-  // ============================================================
-
-  window.Reportli = {
-
-    // ----------------------------------------------------------
-    // IDENTIFY
-    // ----------------------------------------------------------
-
-    identify:
-      function (identity) {
-        try {
-          if (
-            identity &&
-            identity.email
-          ) {
-            user.email =
-              String(
-                identity.email
-              );
-          }
-
-          if (
-            identity &&
-            identity.userId
-          ) {
-            user.userId =
-              String(
-                identity.userId
-              );
-          }
-
-          send(
-            Object.assign(
-              getBaseFields(),
-              {
-                type:
-                  "IDENTIFY"
-              }
-            )
-          );
-
-        } catch (e) {}
-      },
-
-    // ----------------------------------------------------------
-    // TRACK CUSTOM EVENT
-    // ----------------------------------------------------------
-
-    track:
-      function (
-        eventName,
-        properties
-      ) {
-        try {
-          if (!eventName) {
-            return;
-          }
-
-          send(
-            Object.assign(
-              getBaseFields(),
-              {
-                type:
-                  "ACTIVITY",
-
-                event:
-                  String(
-                    eventName
-                  ),
-
-                properties:
-                  properties &&
-                  typeof properties ===
-                    "object"
-                    ? properties
-                    : {}
-              }
-            )
-          );
-
-        } catch (e) {}
-      },
-
-    // ----------------------------------------------------------
-    // CAPTURE ERROR
-    // ----------------------------------------------------------
-
-    capture:
-      function (error) {
-        trackError(
-          error,
-          "manual"
-        );
-      },
-
-    // ----------------------------------------------------------
-    // GET SESSION ID
-    // ----------------------------------------------------------
-
-    getSessionId:
-      function () {
-        return sessionId;
-      },
-
-    // ----------------------------------------------------------
-    // GET USER
-    // ----------------------------------------------------------
-
-    getUser:
-      function () {
-        refreshUser();
-
-        return {
-          email:
-            user.email,
-
-          userId:
-            user.userId
-        };
-      }
-  };
 
 })();
 `;
 
-// ============================================================
-// CLOUDFLARE WORKER
-// ============================================================
+/*
+|--------------------------------------------------------------------------
+| CORS
+|--------------------------------------------------------------------------
+*/
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods":
+      "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Content-Type, x-api-key",
+    "Access-Control-Max-Age": "86400"
+  };
+}
+
+/*
+|--------------------------------------------------------------------------
+| SUPABASE URL BUILDER
+|--------------------------------------------------------------------------
+*/
+
+function buildSupabaseUrl(table) {
+  return (
+    SUPABASE_URL.replace(/\/+$/, "") +
+    "/rest/v1/" +
+    table
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| SUPABASE INSERT
+|--------------------------------------------------------------------------
+*/
+
+async function insertSupabase(
+  table,
+  data
+) {
+  const url =
+    buildSupabaseUrl(table);
+
+  const response = await fetch(url, {
+    method: "POST",
+
+    headers: {
+      "apikey":
+        SUPABASE_SERVICE_ROLE_KEY,
+
+      "Authorization":
+        "Bearer " +
+        SUPABASE_SERVICE_ROLE_KEY,
+
+      "Content-Type":
+        "application/json",
+
+      "Prefer":
+        "return=minimal"
+    },
+
+    body: JSON.stringify(data)
+  });
+
+  const responseText =
+    await response.text();
+
+  if (!response.ok) {
+    console.error(
+      "Supabase insert failed",
+      {
+        table,
+        status: response.status,
+        body: responseText
+      }
+    );
+
+    throw new Error(
+      "Supabase insert failed: " +
+      response.status +
+      " " +
+      responseText
+    );
+  }
+
+  return true;
+}
+
+/*
+|--------------------------------------------------------------------------
+| ERROR INSERT
+|--------------------------------------------------------------------------
+|
+| Your actual errors table:
+|
+| id             text PRIMARY KEY
+| api_key        text
+| error_message  text
+| timestamp      timestamptz
+| ai_analysis    text
+|
+*/
+
+async function saveError(event) {
+  const errorId =
+    "err_" +
+    crypto.randomUUID();
+
+  const timestamp =
+    event.timestamp ||
+    new Date().toISOString();
+
+  /*
+  |--------------------------------------------------------------------------
+  | AI ANALYSIS
+  |--------------------------------------------------------------------------
+  |
+  | Your column is TEXT, so store a readable
+  | JSON string here for now.
+  |
+  | Later your AI processor can replace/update
+  | this value with the actual AI diagnosis.
+  |
+  */
+
+  const aiAnalysis = JSON.stringify(
+    {
+      session_id:
+        event.session_id || null,
+
+      api_key:
+        event.api_key || null,
+
+      file_name:
+        event.file_name || null,
+
+      line_number:
+        event.line_number || null,
+
+      column_number:
+        event.column_number || null,
+
+      stack_trace:
+        event.stack_trace || null,
+
+      context:
+        event.context || null,
+
+      page:
+        event.page || null,
+
+      domain:
+        event.domain || null,
+
+      browser:
+        event.browser || null
+    }
+  );
+
+  /*
+  |--------------------------------------------------------------------------
+  | INSERT INTO errors
+  |--------------------------------------------------------------------------
+  */
+
+  await insertSupabase(
+    "errors",
+    {
+      id: errorId,
+
+      api_key:
+        event.api_key || null,
+
+      error_message:
+        event.error_message ||
+        "Unknown error",
+
+      timestamp: timestamp,
+
+      ai_analysis:
+        aiAnalysis
+    }
+  );
+
+  console.log(
+    "Reportli error saved:",
+    errorId
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| ACTIVITY INSERT
+|--------------------------------------------------------------------------
+*/
+
+async function saveActivity(event) {
+  /*
+  |--------------------------------------------------------------------------
+  | user_activity
+  |--------------------------------------------------------------------------
+  |
+  | Keeps the current structure:
+  |
+  | api_key
+  | session_id
+  | event
+  |
+  */
+
+  await insertSupabase(
+    "user_activity",
+    {
+      api_key:
+        event.api_key || null,
+
+      session_id:
+        event.session_id || null,
+
+      event:
+        event.event || {}
+    }
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| PROCESS EVENT
+|--------------------------------------------------------------------------
+*/
+
+async function processEvent(event) {
+  if (!event) {
+    throw new Error(
+      "Empty event"
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | ERROR
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    event.type === "ERROR"
+  ) {
+    await saveError(event);
+
+    return {
+      success: true,
+      type: "ERROR"
+    };
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | ACTIVITY
+  |--------------------------------------------------------------------------
+  */
+
+  await saveActivity(event);
+
+  return {
+    success: true,
+    type: "ACTIVITY"
+  };
+}
+
+/*
+|--------------------------------------------------------------------------
+| REQUEST HANDLER
+|--------------------------------------------------------------------------
+*/
 
 export default {
-
-  async fetch(
-    request,
-    env
-  ) {
-    const url =
-      new URL(
-        request.url
-      );
-
-    // ========================================================
-    // CORS
-    // ========================================================
+  async fetch(request, env) {
+    /*
+    |--------------------------------------------------------------------------
+    | Environment validation
+    |--------------------------------------------------------------------------
+    */
 
     if (
-      request.method ===
-      "OPTIONS"
+      !env.SUPABASE_URL ||
+      !env.SUPABASE_SERVICE_ROLE_KEY
     ) {
       return new Response(
-        null,
+        JSON.stringify({
+          success: false,
+          error:
+            "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+        }),
         {
-          status:
-            204,
+          status: 500,
 
-          headers:
-            corsHeaders()
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            ...corsHeaders()
+          }
         }
       );
     }
 
-    // ========================================================
-    // GET /
-    // ========================================================
+    /*
+    |--------------------------------------------------------------------------
+    | Update globals
+    |--------------------------------------------------------------------------
+    */
+
+    SUPABASE_URL = env.SUPABASE_URL;
+    SUPABASE_SERVICE_ROLE_KEY =
+      env.SUPABASE_SERVICE_ROLE_KEY;
+
+    /*
+    |--------------------------------------------------------------------------
+    | OPTIONS
+    |--------------------------------------------------------------------------
+    */
 
     if (
-      request.method ===
-        "GET" &&
-      url.pathname ===
-        "/"
+      request.method === "OPTIONS"
     ) {
-      return json(
-        {
-          success:
-            true,
-
-          service:
-            "Reportli AI",
-
-          status:
-            "online",
-
-          sdk:
-            "/reportli.js",
-
-          database:
-            "Supabase"
-        }
-      );
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders()
+      });
     }
 
-    // ========================================================
-    // GET /reportli.js
-    // ========================================================
+    const url =
+      new URL(request.url);
+
+    /*
+    |--------------------------------------------------------------------------
+    | SERVE SDK
+    |--------------------------------------------------------------------------
+    */
 
     if (
-      request.method ===
-        "GET" &&
+      request.method === "GET" &&
       (
         url.pathname ===
           "/reportli.js" ||
@@ -1587,15 +1537,14 @@ export default {
       return new Response(
         REPORTLI_JS,
         {
-          status:
-            200,
+          status: 200,
 
           headers: {
             "Content-Type":
               "application/javascript; charset=UTF-8",
 
             "Cache-Control":
-              "no-cache, no-store, must-revalidate",
+              "public, max-age=300",
 
             ...corsHeaders()
           }
@@ -1603,759 +1552,177 @@ export default {
       );
     }
 
-    // ========================================================
-    // POST EVENTS
-    // ========================================================
+    /*
+    |--------------------------------------------------------------------------
+    | HEALTH CHECK
+    |--------------------------------------------------------------------------
+    */
 
     if (
-      request.method ===
-      "POST"
+      request.method === "GET" &&
+      url.pathname === "/"
     ) {
-      return await receiveEvent(
-        request,
-        env
+      return new Response(
+        JSON.stringify({
+          success: true,
+          service: "Reportli AI",
+          status: "online"
+        }),
+        {
+          status: 200,
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            ...corsHeaders()
+          }
+        }
       );
     }
 
-    // ========================================================
-    // OTHER METHODS
-    // ========================================================
+    /*
+    |--------------------------------------------------------------------------
+    | POST EVENT
+    |--------------------------------------------------------------------------
+    */
 
-    return json(
+    if (
+      request.method === "POST"
+    ) {
+      try {
+        const body =
+          await request.json();
+
+        /*
+        |--------------------------------------------------------------------------
+        | BATCH SUPPORT
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+          body &&
+          body.type === "BATCH" &&
+          Array.isArray(body.events)
+        ) {
+          const results = [];
+
+          for (
+            const event of body.events
+          ) {
+            try {
+              const result =
+                await processEvent(
+                  event
+                );
+
+              results.push(result);
+
+            } catch (error) {
+              console.error(
+                "Failed to process batch event",
+                error
+              );
+
+              results.push({
+                success: false,
+                error:
+                  error.message
+              });
+            }
+          }
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              processed:
+                results.length,
+              results
+            }),
+            {
+              status: 200,
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+
+                ...corsHeaders()
+              }
+            }
+          );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | SINGLE EVENT
+        |--------------------------------------------------------------------------
+        */
+
+        const result =
+          await processEvent(body);
+
+        return new Response(
+          JSON.stringify(result),
+          {
+            status: 200,
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              ...corsHeaders()
+            }
+          }
+        );
+
+      } catch (error) {
+        console.error(
+          "Reportli Worker error:",
+          error
+        );
+
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error:
+              error.message ||
+              "Internal server error"
+          }),
+          {
+            status: 500,
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              ...corsHeaders()
+            }
+          }
+        );
+      }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOT FOUND
+    |--------------------------------------------------------------------------
+    */
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Not found"
+      }),
       {
-        success:
-          false,
+        status: 404,
 
-        error:
-          "Method not allowed"
-      },
-      405
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          ...corsHeaders()
+        }
+      }
     );
   }
 };
-
-
-// ============================================================
-// RECEIVE EVENT
-// ============================================================
-
-async function receiveEvent(
-  request,
-  env
-) {
-  // ==========================================================
-  // CHECK ENVIRONMENT VARIABLES
-  // ==========================================================
-
-  if (
-    !env.SUPABASE_URL
-  ) {
-    console.error(
-      "REPORTLI ERROR: SUPABASE_URL is missing"
-    );
-
-    return json(
-      {
-        success:
-          false,
-
-        error:
-          "SUPABASE_URL is missing"
-      },
-      500
-    );
-  }
-
-  if (
-    !env.SUPABASE_SERVICE_ROLE_KEY
-  ) {
-    console.error(
-      "REPORTLI ERROR: SUPABASE_SERVICE_ROLE_KEY is missing"
-    );
-
-    return json(
-      {
-        success:
-          false,
-
-        error:
-          "SUPABASE_SERVICE_ROLE_KEY is missing"
-      },
-      500
-    );
-  }
-
-  // ==========================================================
-  // READ BODY
-  // ==========================================================
-
-  let rawBody;
-
-  try {
-    rawBody =
-      await request.text();
-  } catch (error) {
-    console.error(
-      "Could not read body:",
-      error
-    );
-
-    return json(
-      {
-        success:
-          false,
-
-        error:
-          "Could not read request body"
-      },
-      400
-    );
-  }
-
-  if (
-    !rawBody
-  ) {
-    return json(
-      {
-        success:
-          false,
-
-        error:
-          "Empty request body"
-      },
-      400
-    );
-  }
-
-  // ==========================================================
-  // PARSE JSON
-  // ==========================================================
-
-  let body;
-
-  try {
-    body =
-      JSON.parse(
-        rawBody
-      );
-  } catch (error) {
-    console.error(
-      "Invalid JSON:",
-      rawBody
-    );
-
-    return json(
-      {
-        success:
-          false,
-
-        error:
-          "Invalid JSON"
-      },
-      400
-    );
-  }
-
-  console.log(
-    "REPORTLI EVENT:",
-    JSON.stringify(
-      body
-    )
-  );
-
-  // ==========================================================
-  // API KEY
-  // ==========================================================
-
-  const headerApiKey =
-    request.headers.get(
-      "x-api-key"
-    );
-
-  const bodyApiKey =
-    body.api_key ||
-    body.apiKey ||
-    null;
-
-  const apiKey =
-    headerApiKey ||
-    bodyApiKey;
-
-  if (
-    !apiKey
-  ) {
-    console.error(
-      "Missing API key"
-    );
-
-    return json(
-      {
-        success:
-          false,
-
-        error:
-          "Missing API key"
-      },
-      401
-    );
-  }
-
-  // ==========================================================
-  // BATCH COMPATIBILITY
-  // ==========================================================
-
-  if (
-    body.type ===
-      "BATCH" &&
-    Array.isArray(
-      body.events
-    )
-  ) {
-    console.log(
-      "Legacy batch received:",
-      body.events.length
-    );
-
-    const results =
-      [];
-
-    for (
-      const event of
-        body.events
-    ) {
-      const result =
-        await processEvent(
-          event,
-          apiKey,
-          env
-        );
-
-      results.push(
-        result
-      );
-    }
-
-    const failed =
-      results.filter(
-        function (result) {
-          return !result.success;
-        }
-      );
-
-    return json(
-      {
-        success:
-          failed.length ===
-          0,
-
-        processed:
-          results.length,
-
-        failed:
-          failed.length,
-
-        results:
-          results
-      },
-      failed.length
-        ? 500
-        : 200
-    );
-  }
-
-  // ==========================================================
-  // SINGLE EVENT
-  // ==========================================================
-
-  const result =
-    await processEvent(
-      body,
-      apiKey,
-      env
-    );
-
-  if (
-    !result.success
-  ) {
-    return json(
-      {
-        success:
-          false,
-
-        error:
-          result.error,
-
-        details:
-          result.details ||
-          null
-      },
-      500
-    );
-  }
-
-  return json(
-    {
-      success:
-        true,
-
-      saved:
-        true,
-
-      type:
-        body.type ||
-        "UNKNOWN"
-    }
-  );
-}
-
-
-// ============================================================
-// PROCESS EVENT
-// ============================================================
-
-async function processEvent(
-  event,
-  requestApiKey,
-  env
-) {
-  if (
-    !event ||
-    typeof event !==
-      "object"
-  ) {
-    return {
-      success:
-        false,
-
-      error:
-        "Invalid event object"
-    };
-  }
-
-  const apiKey =
-    event.api_key ||
-    event.apiKey ||
-    requestApiKey;
-
-  const sessionId =
-    event.session_id ||
-    event.sessionId ||
-    null;
-
-  const type =
-    String(
-      event.type ||
-      ""
-    ).toUpperCase();
-
-  console.log(
-    "Processing:",
-    type,
-    "session:",
-    sessionId
-  );
-
-  // ==========================================================
-  // ERROR
-  // ==========================================================
-
-  if (
-    type ===
-    "ERROR"
-  ) {
-    return await saveError(
-      event,
-      apiKey,
-      sessionId,
-      env
-    );
-  }
-
-  // ==========================================================
-  // EVERYTHING ELSE = ACTIVITY
-  // ==========================================================
-
-  return await saveActivity(
-    event,
-    apiKey,
-    sessionId,
-    env
-  );
-}
-
-
-// ============================================================
-// SAVE ACTIVITY
-// ============================================================
-
-async function saveActivity(
-  event,
-  apiKey,
-  sessionId,
-  env
-) {
-  const row = {
-    api_key:
-      apiKey,
-
-    session_id:
-      sessionId,
-
-    event:
-      event
-  };
-
-  console.log(
-    "SUPABASE user_activity INSERT:",
-    JSON.stringify(
-      row
-    )
-  );
-
-  let response;
-
-  try {
-    response =
-      await fetch(
-        buildSupabaseUrl(
-          env.SUPABASE_URL,
-          "user_activity"
-        ),
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            "apikey":
-              env.SUPABASE_SERVICE_ROLE_KEY,
-
-            "Authorization":
-              "Bearer " +
-              env.SUPABASE_SERVICE_ROLE_KEY,
-
-            "Prefer":
-              "return=minimal"
-          },
-
-          body:
-            JSON.stringify(
-              row
-            )
-        }
-      );
-  } catch (error) {
-    console.error(
-      "SUPABASE NETWORK ERROR:",
-      error
-    );
-
-    return {
-      success:
-        false,
-
-      error:
-        "Supabase request failed",
-
-      details:
-        error &&
-        error.message
-          ? error.message
-          : String(error)
-    };
-  }
-
-  const responseText =
-    await response.text();
-
-  if (
-    !response.ok
-  ) {
-    console.error(
-      "SUPABASE user_activity FAILED",
-      response.status,
-      responseText
-    );
-
-    return {
-      success:
-        false,
-
-      error:
-        "user_activity insert failed",
-
-      details:
-        responseText
-    };
-  }
-
-  console.log(
-    "SUPABASE user_activity SUCCESS"
-  );
-
-  return {
-    success:
-      true,
-
-    table:
-      "user_activity"
-  };
-}
-
-
-// ============================================================
-// SAVE ERROR
-// ============================================================
-
-async function saveError(
-  event,
-  apiKey,
-  sessionId,
-  env
-) {
-  const errorMessage =
-    event.message != null
-      ? String(
-          event.message
-        )
-      : "Unknown error";
-
-  const stackTrace =
-    event.stack != null
-      ? String(
-          event.stack
-        )
-      : "";
-
-  const fileName =
-    event.file_name ||
-    null;
-
-  const lineNumber =
-    event.line_number !=
-    null
-      ? Number(
-          event.line_number
-        )
-      : null;
-
-  const columnNumber =
-    event.column_number !=
-    null
-      ? Number(
-          event.column_number
-        )
-      : null;
-
-  const errorTime =
-    event.time ||
-    new Date().toISOString();
-
-  // ==========================================================
-  // AI ANALYSIS JSON
-  // ==========================================================
-
-  const aiAnalysis = {
-    error_message:
-      errorMessage,
-
-    session_id:
-      sessionId,
-
-    api_key:
-      apiKey,
-
-    time:
-      errorTime,
-
-    file_name:
-      fileName,
-
-    line_number:
-      lineNumber,
-
-    column_number:
-      columnNumber,
-
-    stack_trace:
-      stackTrace,
-
-    context:
-      event.context ||
-      "auto"
-  };
-
-  const row = {
-    ai_analysis:
-      aiAnalysis
-  };
-
-  console.log(
-    "SUPABASE errors INSERT:",
-    JSON.stringify(
-      row
-    )
-  );
-
-  let response;
-
-  try {
-    response =
-      await fetch(
-        buildSupabaseUrl(
-          env.SUPABASE_URL,
-          "errors"
-        ),
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            "apikey":
-              env.SUPABASE_SERVICE_ROLE_KEY,
-
-            "Authorization":
-              "Bearer " +
-              env.SUPABASE_SERVICE_ROLE_KEY,
-
-            "Prefer":
-              "return=minimal"
-          },
-
-          body:
-            JSON.stringify(
-              row
-            )
-        }
-      );
-  } catch (error) {
-    console.error(
-      "SUPABASE ERROR NETWORK FAILURE:",
-      error
-    );
-
-    return {
-      success:
-        false,
-
-      error:
-        "Supabase error request failed",
-
-      details:
-        error &&
-        error.message
-          ? error.message
-          : String(error)
-    };
-  }
-
-  const responseText =
-    await response.text();
-
-  if (
-    !response.ok
-  ) {
-    console.error(
-      "SUPABASE errors FAILED:",
-      response.status,
-      responseText
-    );
-
-    return {
-      success:
-        false,
-
-      error:
-        "errors insert failed",
-
-      details:
-        responseText
-    };
-  }
-
-  console.log(
-    "SUPABASE errors SUCCESS"
-  );
-
-  return {
-    success:
-      true,
-
-    table:
-      "errors"
-  };
-}
-
-
-// ============================================================
-// BUILD SUPABASE URL
-// ============================================================
-
-function buildSupabaseUrl(
-  baseUrl,
-  table
-) {
-  return (
-    String(
-      baseUrl
-    ).replace(
-      /\/+$/,
-      ""
-    ) +
-    "/rest/v1/" +
-    table
-  );
-}
-
-
-// ============================================================
-// CORS
-// ============================================================
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin":
-      "*",
-
-    "Access-Control-Allow-Methods":
-      "GET, POST, OPTIONS",
-
-    "Access-Control-Allow-Headers":
-      "Content-Type, x-api-key",
-
-    "Access-Control-Max-Age":
-      "86400"
-  };
-}
-
-
-// ============================================================
-// JSON RESPONSE
-// ============================================================
-
-function json(
-  data,
-  status = 200
-) {
-  return new Response(
-    JSON.stringify(
-      data
-    ),
-    {
-      status:
-        status,
-
-      headers: {
-        "Content-Type":
-          "application/json; charset=UTF-8",
-
-        ...corsHeaders()
-      }
-    }
-  );
-}
