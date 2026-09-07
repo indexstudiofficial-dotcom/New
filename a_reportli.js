@@ -1,5 +1,5 @@
-const SUPABASE_URL = env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
+let SUPABASE_URL = env.SUPABASE_URL;
+let SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 
 /*
 |--------------------------------------------------------------------------
