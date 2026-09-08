@@ -180,6 +180,34 @@ const REPORTLI_JS = String.raw`
 
   /*
   |--------------------------------------------------------------------------
+  | LOCAL TIME DISPLAY
+  |--------------------------------------------------------------------------
+  |
+  | Computed here, in the visitor's
+  | own browser, using their real
+  | timezone. The Worker never
+  | guesses or hardcodes a timezone -
+  | it only uses this string as-is.
+  |
+  */
+
+  function getLocalTimeDisplay() {
+    try {
+      return new Date().toLocaleTimeString(
+        [],
+        {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true
+        }
+      );
+    } catch (e) {
+      return "";
+    }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
   | BASE EVENT
   |--------------------------------------------------------------------------
   */
@@ -211,7 +239,10 @@ const REPORTLI_JS = String.raw`
         getBrowser(),
 
       time:
-        new Date().toISOString()
+        new Date().toISOString(),
+
+      local_time_display:
+        getLocalTimeDisplay()
     };
   }
 
@@ -528,13 +559,24 @@ const REPORTLI_JS = String.raw`
           clickable ||
           target;
 
+        var info =
+          getElementInfo(
+            clickable
+          );
+
         track(
           "click",
           {
             element:
-              getElementInfo(
-                clickable
-              ),
+              info,
+
+            label:
+              (
+                info.text ||
+                info.aria_label ||
+                ""
+              ).trim() ||
+              "(no label)",
 
             x:
               event.clientX,
@@ -576,12 +618,18 @@ const REPORTLI_JS = String.raw`
   |--------------------------------------------------------------------------
   */
 
+  var CURRENT_PATH =
+    window.location.pathname;
+
   try {
     var originalPushState =
       history.pushState;
 
     history.pushState =
       function () {
+        var previousPath =
+          CURRENT_PATH;
+
         var result =
           originalPushState.apply(
             history,
@@ -589,7 +637,31 @@ const REPORTLI_JS = String.raw`
           );
 
         setTimeout(
-          trackPageView,
+          function () {
+            var newPath =
+              window.location.pathname;
+
+            if (
+              newPath !==
+              previousPath
+            ) {
+              track(
+                "navigation",
+                {
+                  from:
+                    previousPath,
+
+                  to:
+                    newPath
+                }
+              );
+
+              CURRENT_PATH =
+                newPath;
+            }
+
+            trackPageView();
+          },
           0
         );
 
@@ -603,6 +675,9 @@ const REPORTLI_JS = String.raw`
 
     history.replaceState =
       function () {
+        var previousPath =
+          CURRENT_PATH;
+
         var result =
           originalReplaceState.apply(
             history,
@@ -610,7 +685,31 @@ const REPORTLI_JS = String.raw`
           );
 
         setTimeout(
-          trackPageView,
+          function () {
+            var newPath =
+              window.location.pathname;
+
+            if (
+              newPath !==
+              previousPath
+            ) {
+              track(
+                "navigation",
+                {
+                  from:
+                    previousPath,
+
+                  to:
+                    newPath
+                }
+              );
+
+              CURRENT_PATH =
+                newPath;
+            }
+
+            trackPageView();
+          },
           0
         );
 
@@ -620,7 +719,34 @@ const REPORTLI_JS = String.raw`
 
   window.addEventListener(
     "popstate",
-    trackPageView
+    function () {
+      var previousPath =
+        CURRENT_PATH;
+
+      var newPath =
+        window.location.pathname;
+
+      if (
+        newPath !==
+        previousPath
+      ) {
+        track(
+          "navigation",
+          {
+            from:
+              previousPath,
+
+            to:
+              newPath
+          }
+        );
+
+        CURRENT_PATH =
+          newPath;
+      }
+
+      trackPageView();
+    }
   );
 
   window.addEventListener(
@@ -936,6 +1062,9 @@ const REPORTLI_JS = String.raw`
 
         timestamp:
           new Date().toISOString(),
+
+        local_time_display:
+          getLocalTimeDisplay(),
 
         file_name:
           fileName,
@@ -1808,6 +1937,180 @@ async function insertSupabase(
 
 /*
 |--------------------------------------------------------------------------
+| BUILD HUMAN READABLE ACTIVITY STRING
+|--------------------------------------------------------------------------
+|
+| Pure template logic. No AI. No
+| Gemini. No Sarvam AI. Deterministic
+| string building only, exactly as
+| specified.
+|
+| Uses the browser-computed
+| local_time_display as-is - this
+| Worker never computes or guesses
+| a timezone itself.
+|
+|--------------------------------------------------------------------------
+*/
+
+function buildActivityString(
+  eventWrapper
+) {
+  const inner =
+    eventWrapper &&
+    eventWrapper.event
+      ? eventWrapper.event
+      : {};
+
+  const localTime =
+    inner.local_time_display ||
+    "";
+
+  const eventName =
+    inner.event_name ||
+    "";
+
+  let activityText =
+    "";
+
+  if (
+    eventName ===
+    "SESSION_STARTED"
+  ) {
+    activityText =
+      "Session started";
+
+  } else if (
+    eventName ===
+    "SESSION_END"
+  ) {
+    activityText =
+      "Session ended";
+
+  } else if (
+    eventName ===
+    "page_view"
+  ) {
+    let path =
+      inner.page ||
+      inner.url ||
+      "";
+
+    try {
+      if (
+        path &&
+        path.indexOf(
+          "http"
+        ) === 0
+      ) {
+        path =
+          new URL(
+            path
+          ).pathname;
+      }
+    } catch (e) {}
+
+    activityText =
+      "Viewed " +
+      (
+        path ||
+        "unknown page"
+      );
+
+  } else if (
+    eventName ===
+    "click"
+  ) {
+    const label =
+      inner.label ||
+      "(no label)";
+
+    const element =
+      inner.element &&
+      inner.element.tag
+        ? inner.element.tag
+        : "element";
+
+    if (
+      label &&
+      label !==
+        "(no label)"
+    ) {
+      activityText =
+        'Clicked "' +
+        label +
+        '"';
+    } else {
+      activityText =
+        "Clicked " +
+        element;
+    }
+
+  } else if (
+    eventName ===
+    "navigation"
+  ) {
+    const from =
+      inner.from ||
+      "unknown";
+
+    const to =
+      inner.to ||
+      "unknown";
+
+    activityText =
+      "Navigated " +
+      from +
+      " \u2192 " +
+      to;
+
+  } else if (
+    eventName ===
+    "identify"
+  ) {
+    activityText =
+      "Identified as " +
+      (
+        inner.email ||
+        inner.user_id ||
+        "unknown user"
+      );
+
+  } else if (
+    eventName ===
+    "error_occurred"
+  ) {
+    activityText =
+      "error occurred";
+
+  } else {
+    /*
+    Unknown event name -
+    fall back to a safe
+    generic string, never
+    raw JSON.
+    */
+
+    activityText =
+      eventName ||
+      "Activity";
+  }
+
+  if (
+    localTime
+  ) {
+    return (
+      localTime +
+      "   " +
+      activityText
+    );
+  }
+
+  return activityText;
+}
+
+/*
+|--------------------------------------------------------------------------
 | SAVE ACTIVITY
 |--------------------------------------------------------------------------
 */
@@ -1816,6 +2119,11 @@ async function saveActivity(
   env,
   event
 ) {
+  const activityString =
+    buildActivityString(
+      event
+    );
+
   const activity = {
     api_key:
       event.api_key ||
@@ -1826,8 +2134,7 @@ async function saveActivity(
       null,
 
     event:
-      event.event ||
-      {}
+      activityString
   };
 
   await insertSupabase(
@@ -1835,6 +2142,249 @@ async function saveActivity(
     "user_activity",
     activity
   );
+}
+
+/*
+|--------------------------------------------------------------------------
+| SAVE ERROR-TRIGGERED ACTIVITY ROW
+|--------------------------------------------------------------------------
+|
+| Every saved error also creates a
+| companion row in user_activity so
+| it shows in the timeline as:
+|
+| 09:17 AM   error occurred
+|
+|--------------------------------------------------------------------------
+*/
+
+async function saveErrorActivity(
+  env,
+  event
+) {
+  const wrapper = {
+    api_key:
+      event.api_key ||
+      null,
+
+    session_id:
+      event.session_id ||
+      null,
+
+    event: {
+      event_name:
+        "error_occurred",
+
+      local_time_display:
+        event.local_time_display ||
+        ""
+    }
+  };
+
+  await saveActivity(
+    env,
+    wrapper
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| SARVAM AI - ERROR ANALYSIS
+|--------------------------------------------------------------------------
+|
+| Generates the plain-paragraph
+| analysis format:
+|
+| [explanation]
+|
+| Cause:
+| [cause]
+|
+| Recommended:
+| [recommendation]
+|
+| Location:
+| file:line:col
+|
+| Stack trace:
+| [stack]
+|
+|--------------------------------------------------------------------------
+*/
+
+async function generateAiAnalysis(
+  env,
+  event
+) {
+  const location =
+    (
+      event.file_name ||
+      "unknown"
+    ) +
+    ":" +
+    (
+      event.line_number !=
+      null
+        ? event.line_number
+        : "?"
+    ) +
+    ":" +
+    (
+      event.column_number !=
+      null
+        ? event.column_number
+        : "?"
+    );
+
+  const stack =
+    event.stack_trace ||
+    "No stack trace available";
+
+  if (
+    !env.SARVAM_API_KEY
+  ) {
+    /*
+    Fail safe - never crash
+    the save if Sarvam is
+    not configured.
+    */
+
+    return (
+      (
+        event.error_message ||
+        "An error occurred."
+      ) +
+      "\n\nCause:\nUnknown - Sarvam AI is not configured.\n\nRecommended:\nCheck the Worker environment variables.\n\nLocation:\n" +
+      location +
+      "\n\nStack trace:\n" +
+      stack
+    );
+  }
+
+  try {
+    const prompt =
+      "You are an expert software engineer. Analyze this production error and respond in EXACTLY this plain text format with no markdown, no headers with #, no emoji:\n\n" +
+      "[One or two sentence plain English explanation of what happened and why, written as flowing prose]\n\n" +
+      "Cause:\n" +
+      "[One or two sentence explanation of the root cause]\n\n" +
+      "Recommended:\n" +
+      "[One or two sentence actionable recommendation]\n\n" +
+      "Location:\n" +
+      location +
+      "\n\n" +
+      "Stack trace:\n" +
+      stack +
+      "\n\n" +
+      "Error message: " +
+      (
+        event.error_message ||
+        "Unknown error"
+      ) +
+      "\nContext: " +
+      (
+        event.context ||
+        "unknown"
+      ) +
+      "\nPage: " +
+      (
+        event.page ||
+        "unknown"
+      ) +
+      "\n\nRespond with ONLY the formatted analysis text, nothing else. Do not repeat the Location or Stack trace sections differently than shown above - use the exact location and stack trace given.";
+
+    const sarvamResponse =
+      await fetch(
+        "https://api.sarvam.ai/v1/chat/completions",
+        {
+          method:
+            "POST",
+
+          headers:
+            {
+              "Content-Type":
+                "application/json",
+
+              "api-subscription-key":
+                env.SARVAM_API_KEY
+            },
+
+          body:
+            JSON.stringify(
+              {
+                model:
+                  "sarvam-105b",
+
+                messages:
+                  [
+                    {
+                      role:
+                        "user",
+
+                      content:
+                        prompt
+                    }
+                  ],
+
+                max_tokens:
+                  700,
+
+                temperature:
+                  0.3
+              }
+            )
+        }
+      );
+
+    const sarvamData =
+      await sarvamResponse.json();
+
+    const content =
+      sarvamData &&
+      sarvamData.choices &&
+      sarvamData.choices[0] &&
+      sarvamData.choices[0]
+        .message
+        ? sarvamData
+            .choices[0]
+            .message
+            .content
+        : null;
+
+    if (
+      content &&
+      content.trim()
+    ) {
+      return content.trim();
+    }
+
+    throw new Error(
+      "Empty Sarvam AI response"
+    );
+
+  } catch (e) {
+    console.error(
+      "Sarvam AI error:",
+      e.message
+    );
+
+    /*
+    Fail safe fallback -
+    still gives a usable
+    analysis even if Sarvam
+    AI fails.
+    */
+
+    return (
+      (
+        event.error_message ||
+        "An error occurred."
+      ) +
+      "\n\nCause:\nUnable to determine automatically - AI analysis failed.\n\nRecommended:\nReview the stack trace below manually.\n\nLocation:\n" +
+      location +
+      "\n\nStack trace:\n" +
+      stack
+    );
+  }
 }
 
 /*
@@ -1880,63 +2430,14 @@ async function saveError(
 
   /*
   |--------------------------------------------------------------------------
-  | AI ANALYSIS
+  | AI ANALYSIS (Sarvam AI)
   |--------------------------------------------------------------------------
-  |
-  | Your database column is TEXT.
-  |
-  | Therefore we store the diagnostic
-  | information as a JSON string.
-  |
   */
 
   const aiAnalysis =
-    JSON.stringify(
-      {
-        session_id:
-          event.session_id ||
-          null,
-
-        api_key:
-          event.api_key ||
-          null,
-
-        file_name:
-          event.file_name ||
-          null,
-
-        line_number:
-          event.line_number ||
-          null,
-
-        column_number:
-          event.column_number ||
-          null,
-
-        stack_trace:
-          event.stack_trace ||
-          null,
-
-        context:
-          event.context ||
-          null,
-
-        page:
-          event.page ||
-          null,
-
-        domain:
-          event.domain ||
-          null,
-
-        browser:
-          event.browser ||
-          null,
-
-        extra:
-          event.extra ||
-          null
-      }
+    await generateAiAnalysis(
+      env,
+      event
     );
 
   /*
@@ -1991,6 +2492,29 @@ async function saveError(
     "Reportli error saved successfully:",
     errorId
   );
+
+  /*
+  |--------------------------------------------------------------------------
+  | COMPANION ACTIVITY ROW
+  |--------------------------------------------------------------------------
+  |
+  | Shows "error occurred" in the
+  | timeline alongside the full
+  | error record.
+  |
+  */
+
+  try {
+    await saveErrorActivity(
+      env,
+      event
+    );
+  } catch (e) {
+    console.error(
+      "Failed to save error activity row:",
+      e.message
+    );
+  }
 
   return true;
 }
