@@ -17,6 +17,7 @@
 const WORKER_URL =
   "https://reportliai-sbs.reportliaihq.workers.dev";
 
+
 /*
 |--------------------------------------------------------------------------
 | REPORTLI BROWSER SDK
@@ -39,6 +40,7 @@ const REPORTLI_JS = String.raw`
 
   window.__REPORTLI_LOADED__ = true;
 
+
   /*
   |--------------------------------------------------------------------------
   | CONFIG
@@ -47,6 +49,7 @@ const REPORTLI_JS = String.raw`
 
   var WORKER_URL =
     "${WORKER_URL}";
+
 
   /*
   |--------------------------------------------------------------------------
@@ -61,9 +64,7 @@ const REPORTLI_JS = String.raw`
 
       if (currentScript) {
         var currentKey =
-          currentScript.getAttribute(
-            "data-key"
-          );
+          currentScript.getAttribute("data-key");
 
         if (currentKey) {
           return currentKey;
@@ -71,9 +72,7 @@ const REPORTLI_JS = String.raw`
       }
 
       var scripts =
-        document.getElementsByTagName(
-          "script"
-        );
+        document.getElementsByTagName("script");
 
       for (
         var i = 0;
@@ -87,17 +86,11 @@ const REPORTLI_JS = String.raw`
           script.src || "";
 
         if (
-          src.indexOf(
-            "reportli.js"
-          ) !== -1 ||
-          src.indexOf(
-            "a_reportli.js"
-          ) !== -1
+          src.indexOf("reportli.js") !== -1 ||
+          src.indexOf("a_reportli.js") !== -1
         ) {
           var key =
-            script.getAttribute(
-              "data-key"
-            );
+            script.getAttribute("data-key");
 
           if (key) {
             return key;
@@ -114,6 +107,7 @@ const REPORTLI_JS = String.raw`
 
   var API_KEY =
     getApiKey();
+
 
   /*
   |--------------------------------------------------------------------------
@@ -132,6 +126,7 @@ const REPORTLI_JS = String.raw`
   var SESSION_STARTED_AT =
     Date.now();
 
+
   /*
   |--------------------------------------------------------------------------
   | USER
@@ -140,17 +135,13 @@ const REPORTLI_JS = String.raw`
 
   function detectUser() {
     try {
-      if (
-        window.reportliUser
-      ) {
+      if (window.reportliUser) {
         return {
           email:
-            window.reportliUser
-              .email || null,
+            window.reportliUser.email || null,
 
           user_id:
-            window.reportliUser
-              .userId || null
+            window.reportliUser.userId || null
         };
       }
     } catch (e) {}
@@ -160,6 +151,7 @@ const REPORTLI_JS = String.raw`
       user_id: null
     };
   }
+
 
   /*
   |--------------------------------------------------------------------------
@@ -178,17 +170,11 @@ const REPORTLI_JS = String.raw`
     }
   }
 
+
   /*
   |--------------------------------------------------------------------------
-  | LOCAL TIME DISPLAY
+  | LOCAL TIME
   |--------------------------------------------------------------------------
-  |
-  | Computed here, in the visitor's
-  | own browser, using their real
-  | timezone. The Worker never
-  | guesses or hardcodes a timezone -
-  | it only uses this string as-is.
-  |
   */
 
   function getLocalTimeDisplay() {
@@ -205,6 +191,7 @@ const REPORTLI_JS = String.raw`
       return "";
     }
   }
+
 
   /*
   |--------------------------------------------------------------------------
@@ -246,9 +233,10 @@ const REPORTLI_JS = String.raw`
     };
   }
 
+
   /*
   |--------------------------------------------------------------------------
-  | SEND
+  | SEND EVENT
   |--------------------------------------------------------------------------
   */
 
@@ -262,9 +250,8 @@ const REPORTLI_JS = String.raw`
 
     try {
       var body =
-        JSON.stringify(
-          payload
-        );
+        JSON.stringify(payload);
+
 
       /*
       |--------------------------------------------------------------------------
@@ -299,6 +286,7 @@ const REPORTLI_JS = String.raw`
         } catch (e) {}
       }
 
+
       /*
       |--------------------------------------------------------------------------
       | FETCH
@@ -308,31 +296,36 @@ const REPORTLI_JS = String.raw`
       fetch(
         WORKER_URL,
         {
-          method: "POST",
+          method:
+            "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
+          headers:
+            {
+              "Content-Type":
+                "application/json",
 
-            "x-api-key":
-              API_KEY
-          },
+              "x-api-key":
+                API_KEY
+            },
 
-          body: body,
+          body:
+            body,
 
-          keepalive: true
+          keepalive:
+            true
         }
       ).catch(
         function () {
           /*
-          Reportli must NEVER
-          create another error.
+          Never allow Reportli
+          to create another error.
           */
         }
       );
 
     } catch (e) {}
   }
+
 
   /*
   |--------------------------------------------------------------------------
@@ -356,22 +349,26 @@ const REPORTLI_JS = String.raw`
           data || {}
         );
 
-      send({
-        type:
-          "ACTIVITY",
+      send(
+        {
+          type:
+            "ACTIVITY",
 
-        api_key:
-          API_KEY,
+          api_key:
+            API_KEY,
 
-        session_id:
-          SESSION_ID,
+          session_id:
+            SESSION_ID,
 
-        event:
-          eventPayload
-      });
+          event:
+            eventPayload
+        },
+        false
+      );
 
     } catch (e) {}
   }
+
 
   /*
   |--------------------------------------------------------------------------
@@ -386,6 +383,7 @@ const REPORTLI_JS = String.raw`
         new Date().toISOString()
     }
   );
+
 
   /*
   |--------------------------------------------------------------------------
@@ -403,6 +401,7 @@ const REPORTLI_JS = String.raw`
         document.title
     }
   );
+
 
   /*
   |--------------------------------------------------------------------------
@@ -433,14 +432,8 @@ const REPORTLI_JS = String.raw`
             ""
           )
             .trim()
-            .replace(
-              /\s+/g,
-              " "
-            )
-            .substring(
-              0,
-              200
-            );
+            .replace(/\s+/g, " ")
+            .substring(0, 200);
       } catch (e) {}
 
       var id =
@@ -473,9 +466,7 @@ const REPORTLI_JS = String.raw`
 
       try {
         name =
-          element.getAttribute(
-            "name"
-          );
+          element.getAttribute("name");
       } catch (e) {}
 
       var ariaLabel =
@@ -483,9 +474,7 @@ const REPORTLI_JS = String.raw`
 
       try {
         ariaLabel =
-          element.getAttribute(
-            "aria-label"
-          );
+          element.getAttribute("aria-label");
       } catch (e) {}
 
       var value =
@@ -527,6 +516,7 @@ const REPORTLI_JS = String.raw`
       return {};
     }
   }
+
 
   /*
   |--------------------------------------------------------------------------
@@ -591,6 +581,7 @@ const REPORTLI_JS = String.raw`
     true
   );
 
+
   /*
   |--------------------------------------------------------------------------
   | PAGE VIEW
@@ -612,6 +603,7 @@ const REPORTLI_JS = String.raw`
     } catch (e) {}
   }
 
+
   /*
   |--------------------------------------------------------------------------
   | SPA NAVIGATION
@@ -620,6 +612,7 @@ const REPORTLI_JS = String.raw`
 
   var CURRENT_PATH =
     window.location.pathname;
+
 
   try {
     var originalPushState =
@@ -661,13 +654,16 @@ const REPORTLI_JS = String.raw`
             }
 
             trackPageView();
+
           },
           0
         );
 
         return result;
       };
+
   } catch (e) {}
+
 
   try {
     var originalReplaceState =
@@ -709,13 +705,16 @@ const REPORTLI_JS = String.raw`
             }
 
             trackPageView();
+
           },
           0
         );
 
         return result;
       };
+
   } catch (e) {}
+
 
   window.addEventListener(
     "popstate",
@@ -749,10 +748,12 @@ const REPORTLI_JS = String.raw`
     }
   );
 
+
   window.addEventListener(
     "hashchange",
     trackPageView
   );
+
 
   /*
   |--------------------------------------------------------------------------
@@ -761,6 +762,7 @@ const REPORTLI_JS = String.raw`
   */
 
   var recentErrors = {};
+
 
   function getErrorSignature(
     message,
@@ -775,6 +777,7 @@ const REPORTLI_JS = String.raw`
       lineNumber || ""
     ].join("|");
   }
+
 
   function shouldReportError(
     message,
@@ -795,25 +798,17 @@ const REPORTLI_JS = String.raw`
         Date.now();
 
       if (
-        recentErrors[
-          signature
-        ] &&
+        recentErrors[signature] &&
         now -
-          recentErrors[
-            signature
-          ] <
+          recentErrors[signature] <
           2000
       ) {
         return false;
       }
 
-      recentErrors[
-        signature
-      ] = now;
+      recentErrors[signature] =
+        now;
 
-      /*
-      Clean old errors.
-      */
 
       Object.keys(
         recentErrors
@@ -821,14 +816,10 @@ const REPORTLI_JS = String.raw`
         function (key) {
           if (
             now -
-              recentErrors[
-                key
-              ] >
+              recentErrors[key] >
               10000
           ) {
-            delete recentErrors[
-              key
-            ];
+            delete recentErrors[key];
           }
         }
       );
@@ -839,6 +830,7 @@ const REPORTLI_JS = String.raw`
       return true;
     }
   }
+
 
   /*
   |--------------------------------------------------------------------------
@@ -861,9 +853,7 @@ const REPORTLI_JS = String.raw`
         return error;
       }
 
-      if (
-        error.message
-      ) {
+      if (error.message) {
         return String(
           error.message
         );
@@ -874,15 +864,14 @@ const REPORTLI_JS = String.raw`
           error
         );
       } catch (e) {
-        return String(
-          error
-        );
+        return String(error);
       }
 
     } catch (e) {
       return "Unknown error";
     }
   }
+
 
   /*
   |--------------------------------------------------------------------------
@@ -910,6 +899,7 @@ const REPORTLI_JS = String.raw`
     }
   }
 
+
   /*
   |--------------------------------------------------------------------------
   | CORE ERROR TRACKER
@@ -923,14 +913,10 @@ const REPORTLI_JS = String.raw`
   ) {
     try {
       var message =
-        getErrorMessage(
-          error
-        );
+        getErrorMessage(error);
 
       var stack =
-        getErrorStack(
-          error
-        );
+        getErrorStack(error);
 
       var fileName =
         null;
@@ -941,10 +927,6 @@ const REPORTLI_JS = String.raw`
       var columnNumber =
         null;
 
-      /*
-      Extract location
-      from Error object.
-      */
 
       try {
         if (
@@ -997,9 +979,9 @@ const REPORTLI_JS = String.raw`
 
       } catch (e) {}
 
+
       /*
-      Override with
-      supplied values.
+      Override supplied values.
       */
 
       if (
@@ -1012,7 +994,8 @@ const REPORTLI_JS = String.raw`
 
       if (
         extra &&
-        extra.line_number
+        extra.line_number !=
+          null
       ) {
         lineNumber =
           extra.line_number;
@@ -1020,11 +1003,13 @@ const REPORTLI_JS = String.raw`
 
       if (
         extra &&
-        extra.column_number
+        extra.column_number !=
+          null
       ) {
         columnNumber =
           extra.column_number;
       }
+
 
       /*
       Deduplicate.
@@ -1041,10 +1026,9 @@ const REPORTLI_JS = String.raw`
         return;
       }
 
+
       /*
-      |--------------------------------------------------------------------------
-      | ERROR PAYLOAD
-      |--------------------------------------------------------------------------
+      ERROR PAYLOAD
       */
 
       var payload = {
@@ -1092,9 +1076,6 @@ const REPORTLI_JS = String.raw`
           getBrowser()
       };
 
-      /*
-      Additional information.
-      */
 
       if (extra) {
         try {
@@ -1103,31 +1084,20 @@ const REPORTLI_JS = String.raw`
         } catch (e) {}
       }
 
-      /*
-      Send immediately.
-      */
 
       send(
         payload,
         false
       );
 
-    } catch (e) {
-      /*
-      Never allow Reportli
-      to crash the customer's app.
-      */
-    }
+    } catch (e) {}
   }
+
 
   /*
   |--------------------------------------------------------------------------
-  | window.onerror
+  | WINDOW ERROR
   |--------------------------------------------------------------------------
-  |
-  | Primary JavaScript runtime
-  | error handler.
-  |
   */
 
   window.onerror =
@@ -1142,9 +1112,7 @@ const REPORTLI_JS = String.raw`
         var actualError =
           error;
 
-        if (
-          !actualError
-        ) {
+        if (!actualError) {
           actualError =
             new Error(
               typeof message ===
@@ -1174,13 +1142,9 @@ const REPORTLI_JS = String.raw`
 
       } catch (e) {}
 
-      /*
-      Returning false preserves
-      normal browser behavior.
-      */
-
       return false;
     };
+
 
   /*
   |--------------------------------------------------------------------------
@@ -1192,9 +1156,6 @@ const REPORTLI_JS = String.raw`
     "error",
     function (event) {
       try {
-        /*
-        Runtime JavaScript error.
-        */
 
         if (
           event &&
@@ -1220,6 +1181,7 @@ const REPORTLI_JS = String.raw`
 
           return;
         }
+
 
         /*
         Resource error.
@@ -1276,6 +1238,7 @@ const REPORTLI_JS = String.raw`
     true
   );
 
+
   /*
   |--------------------------------------------------------------------------
   | UNHANDLED PROMISE REJECTION
@@ -1290,13 +1253,8 @@ const REPORTLI_JS = String.raw`
           event &&
           event.reason;
 
-        /*
-        Normal Error.
-        */
-
         if (
-          reason instanceof
-          Error
+          reason instanceof Error
         ) {
           trackError(
             reason,
@@ -1306,36 +1264,24 @@ const REPORTLI_JS = String.raw`
           return;
         }
 
-        /*
-        String rejection.
-        */
-
         if (
           typeof reason ===
           "string"
         ) {
           trackError(
-            new Error(
-              reason
-            ),
+            new Error(reason),
             "unhandledrejection"
           );
 
           return;
         }
 
-        /*
-        Object rejection.
-        */
-
         var message =
           "";
 
         try {
           message =
-            JSON.stringify(
-              reason
-            );
+            JSON.stringify(reason);
         } catch (e) {
           message =
             String(reason);
@@ -1354,15 +1300,14 @@ const REPORTLI_JS = String.raw`
     true
   );
 
+
   /*
   |--------------------------------------------------------------------------
   | FETCH INTERCEPTION
   |--------------------------------------------------------------------------
   */
 
-  if (
-    window.fetch
-  ) {
+  if (window.fetch) {
     try {
       var originalFetch =
         window.fetch;
@@ -1385,6 +1330,7 @@ const REPORTLI_JS = String.raw`
             ) {
               requestUrl =
                 args[0];
+
             } else if (
               args[0] &&
               args[0].url
@@ -1400,7 +1346,9 @@ const REPORTLI_JS = String.raw`
               requestMethod =
                 args[1].method;
             }
+
           } catch (e) {}
+
 
           /*
           Don't monitor Reportli.
@@ -1408,9 +1356,7 @@ const REPORTLI_JS = String.raw`
 
           if (
             requestUrl &&
-            String(
-              requestUrl
-            ).indexOf(
+            String(requestUrl).indexOf(
               WORKER_URL
             ) !== -1
           ) {
@@ -1420,20 +1366,18 @@ const REPORTLI_JS = String.raw`
             );
           }
 
+
           return originalFetch
             .apply(
               this,
               args
             )
             .then(
-              function (
-                response
-              ) {
+              function (response) {
                 try {
                   if (
                     response &&
-                    response.status >=
-                      400
+                    response.status >= 400
                   ) {
                     trackError(
                       new Error(
@@ -1458,15 +1402,14 @@ const REPORTLI_JS = String.raw`
                       }
                     );
                   }
+
                 } catch (e) {}
 
                 return response;
               }
             )
             .catch(
-              function (
-                error
-              ) {
+              function (error) {
                 try {
                   trackError(
                     error,
@@ -1481,11 +1424,6 @@ const REPORTLI_JS = String.raw`
                   );
                 } catch (e) {}
 
-                /*
-                Preserve original
-                application behavior.
-                */
-
                 throw error;
               }
             );
@@ -1494,15 +1432,14 @@ const REPORTLI_JS = String.raw`
     } catch (e) {}
   }
 
+
   /*
   |--------------------------------------------------------------------------
   | XHR INTERCEPTION
   |--------------------------------------------------------------------------
   */
 
-  if (
-    window.XMLHttpRequest
-  ) {
+  if (window.XMLHttpRequest) {
     try {
       var OriginalXHR =
         window.XMLHttpRequest;
@@ -1517,9 +1454,6 @@ const REPORTLI_JS = String.raw`
         var requestMethod =
           "GET";
 
-        /*
-        Capture open().
-        */
 
         var originalOpen =
           xhr.open;
@@ -1530,8 +1464,7 @@ const REPORTLI_JS = String.raw`
             url
           ) {
             requestMethod =
-              method ||
-              "GET";
+              method || "GET";
 
             requestUrl =
               url;
@@ -1542,36 +1475,24 @@ const REPORTLI_JS = String.raw`
             );
           };
 
-        /*
-        Monitor request result.
-        */
 
         xhr.addEventListener(
           "loadend",
           function () {
             try {
-              /*
-              Don't monitor Reportli.
-              */
 
               if (
                 requestUrl &&
-                String(
-                  requestUrl
-                ).indexOf(
+                String(requestUrl).indexOf(
                   WORKER_URL
                 ) !== -1
               ) {
                 return;
               }
 
-              /*
-              HTTP error.
-              */
 
               if (
-                xhr.status >=
-                400
+                xhr.status >= 400
               ) {
                 trackError(
                   new Error(
@@ -1599,13 +1520,9 @@ const REPORTLI_JS = String.raw`
                 return;
               }
 
-              /*
-              Network error.
-              */
 
               if (
-                xhr.status ===
-                  0 &&
+                xhr.status === 0 &&
                 requestUrl
               ) {
                 trackError(
@@ -1643,6 +1560,7 @@ const REPORTLI_JS = String.raw`
     } catch (e) {}
   }
 
+
   /*
   |--------------------------------------------------------------------------
   | MANUAL ERROR CAPTURE
@@ -1660,6 +1578,7 @@ const REPORTLI_JS = String.raw`
     );
   }
 
+
   /*
   |--------------------------------------------------------------------------
   | PUBLIC API
@@ -1668,10 +1587,6 @@ const REPORTLI_JS = String.raw`
 
   window.Reportli = {
 
-    /*
-    Activity tracking.
-    */
-
     track:
       function (
         eventName,
@@ -1679,17 +1594,14 @@ const REPORTLI_JS = String.raw`
       ) {
         track(
           eventName,
-          properties ||
-            {}
+          properties || {}
         );
       },
 
-    /*
-    Error tracking.
-    */
 
     capture:
       capture,
+
 
     captureException:
       function (
@@ -1703,58 +1615,45 @@ const REPORTLI_JS = String.raw`
         );
       },
 
-    /*
-    Identify user.
-    */
 
     identify:
       function (
         email,
         userId
       ) {
-        window.reportliUser =
-          {
-            email:
-              email ||
-              null,
+        window.reportliUser = {
+          email:
+            email || null,
 
-            userId:
-              userId ||
-              null
-          };
+          userId:
+            userId || null
+        };
 
         track(
           "identify",
           {
             email:
-              email ||
-              null,
+              email || null,
 
             user_id:
-              userId ||
-              null
+              userId || null
           }
         );
       },
 
-    /*
-    Session.
-    */
 
     getSessionId:
       function () {
         return SESSION_ID;
-      },
+    },
 
-    /*
-    User.
-    */
 
     getUser:
       function () {
         return detectUser();
       }
   };
+
 
   /*
   |--------------------------------------------------------------------------
@@ -1798,6 +1697,7 @@ const REPORTLI_JS = String.raw`
     } catch (e) {}
   }
 
+
   window.addEventListener(
     "pagehide",
     endSession
@@ -1805,6 +1705,7 @@ const REPORTLI_JS = String.raw`
 
 })();
 `;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -1828,15 +1729,158 @@ function corsHeaders() {
   };
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| NORMALIZE DOMAIN
+|--------------------------------------------------------------------------
+|
+| Example:
+|
+| https://Example.com/
+| example.com
+| EXAMPLE.COM
+|
+| all become:
+|
+| example.com
+|
+|--------------------------------------------------------------------------
+*/
+
+function normalizeDomain(
+  value
+) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    var domain =
+      String(value)
+        .trim()
+        .toLowerCase();
+
+    /*
+    If a full URL somehow
+    arrives, extract hostname.
+    */
+
+    if (
+      domain.indexOf("://") !== -1
+    ) {
+      domain =
+        new URL(domain).hostname;
+    }
+
+    /*
+    Remove trailing dot.
+    */
+
+    domain =
+      domain.replace(/\.+$/, "");
+
+    /*
+    Remove www only if desired.
+    IMPORTANT:
+    Keep this disabled if
+    www.example.com and
+    example.com are different
+    applications in your system.
+    */
+
+    return domain;
+
+  } catch (e) {
+    return "";
+  }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| SUPABASE REQUEST
+|--------------------------------------------------------------------------
+*/
+
+async function supabaseRequest(
+  env,
+  path,
+  options
+) {
+  if (!env.SUPABASE_URL) {
+    throw new Error(
+      "SUPABASE_URL is missing"
+    );
+  }
+
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is missing"
+    );
+  }
+
+  var supabaseUrl =
+    env.SUPABASE_URL.replace(
+      /\/+$/,
+      ""
+    );
+
+  var response =
+    await fetch(
+      supabaseUrl +
+        path,
+      {
+        ...options,
+
+        headers: {
+          "apikey":
+            env.SUPABASE_SERVICE_ROLE_KEY,
+
+          "Authorization":
+            "Bearer " +
+            env.SUPABASE_SERVICE_ROLE_KEY,
+
+          "Content-Type":
+            "application/json",
+
+          ...(options &&
+            options.headers
+              ? options.headers
+              : {})
+        }
+      }
+    );
+
+  var responseText =
+    await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      "Supabase request failed: " +
+        response.status +
+        " " +
+        responseText
+    );
+  }
+
+  if (!responseText) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      responseText
+    );
+  } catch (e) {
+    return responseText;
+  }
+}
+
+
 /*
 |--------------------------------------------------------------------------
 | SUPABASE INSERT
-|--------------------------------------------------------------------------
-|
-| IMPORTANT:
-| env is passed into this function.
-| There is NO env reference at
-| the top level of this Worker.
 |--------------------------------------------------------------------------
 */
 
@@ -1845,163 +1889,278 @@ async function insertSupabase(
   table,
   data
 ) {
-  if (
-    !env.SUPABASE_URL
-  ) {
-    throw new Error(
-      "SUPABASE_URL is missing"
-    );
-  }
+  await supabaseRequest(
+    env,
+    "/rest/v1/" + table,
+    {
+      method:
+        "POST",
 
-  if (
-    !env.SUPABASE_SERVICE_ROLE_KEY
-  ) {
-    throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is missing"
-    );
-  }
+      headers: {
+        "Prefer":
+          "return=minimal"
+      },
 
-  const supabaseUrl =
-    env.SUPABASE_URL.replace(
-      /\/+$/,
-      ""
-    );
-
-  const url =
-    supabaseUrl +
-    "/rest/v1/" +
-    table;
-
-  const response =
-    await fetch(
-      url,
-      {
-        method:
-          "POST",
-
-        headers:
-          {
-            "apikey":
-              env.SUPABASE_SERVICE_ROLE_KEY,
-
-            "Authorization":
-              "Bearer " +
-              env.SUPABASE_SERVICE_ROLE_KEY,
-
-            "Content-Type":
-              "application/json",
-
-            "Prefer":
-              "return=minimal"
-          },
-
-        body:
-          JSON.stringify(
-            data
-          )
-      }
-    );
-
-  const responseText =
-    await response.text();
-
-  if (
-    !response.ok
-  ) {
-    console.error(
-      "SUPABASE INSERT FAILED",
-      {
-        table:
-          table,
-
-        status:
-          response.status,
-
-        response:
-          responseText
-      }
-    );
-
-    throw new Error(
-      "Supabase " +
-        table +
-        " insert failed: " +
-        response.status +
-        " " +
-        responseText
-    );
-  }
+      body:
+        JSON.stringify(data)
+    }
+  );
 
   return true;
 }
 
+
 /*
 |--------------------------------------------------------------------------
-| BUILD HUMAN READABLE ACTIVITY STRING
+| VALIDATE APPLICATION
 |--------------------------------------------------------------------------
 |
-| Pure template logic. No AI. No
-| Gemini. No Sarvam AI. Deterministic
-| string building only, exactly as
-| specified.
+| THIS IS THE FIRST IMPORTANT
+| STEP FOR EVERY EVENT.
 |
-| Uses the browser-computed
-| local_time_display as-is - this
-| Worker never computes or guesses
-| a timezone itself.
+| Required:
+|
+| 1. api_key exists
+| 2. domain exists
+| 3. application exists
+| 4. api_key matches
+| 5. domain matches
+|
+| Then we obtain:
+|
+| application.user_id
 |
 |--------------------------------------------------------------------------
 */
 
-function buildActivityString(
-  eventWrapper
+async function validateApplication(
+  env,
+  event
 ) {
-  const inner =
-    eventWrapper &&
-    eventWrapper.event
-      ? eventWrapper.event
-      : {};
+  var apiKey =
+    event &&
+    typeof event.api_key ===
+      "string"
+      ? event.api_key.trim()
+      : "";
 
-  const localTime =
-    inner.local_time_display ||
-    "";
+  var incomingDomain =
+    normalizeDomain(
+      event &&
+      event.domain
+    );
 
-  const eventName =
-    inner.event_name ||
-    "";
 
-  let activityText =
-    "";
+  /*
+  |--------------------------------------------------------------------------
+  | API KEY REQUIRED
+  |--------------------------------------------------------------------------
+  */
+
+  if (!apiKey) {
+    throw new Error(
+      "Missing api_key"
+    );
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | DOMAIN REQUIRED
+  |--------------------------------------------------------------------------
+  */
+
+  if (!incomingDomain) {
+    throw new Error(
+      "Missing domain"
+    );
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | QUERY APPLICATION
+  |--------------------------------------------------------------------------
+  |
+  | We query by API key first.
+  | Domain is then checked again
+  | server-side.
+  |
+  |--------------------------------------------------------------------------
+  */
+
+  var encodedApiKey =
+    encodeURIComponent(
+      apiKey
+    );
+
+  var query =
+    "/rest/v1/applications" +
+    "?select=id,name,api_key,status,user_id,domain" +
+    "&api_key=eq." +
+    encodedApiKey +
+    "&limit=1";
+
+  var applications =
+    await supabaseRequest(
+      env,
+      query,
+      {
+        method:
+          "GET"
+      }
+    );
+
+
+  if (
+    !Array.isArray(
+      applications
+    ) ||
+    applications.length === 0
+  ) {
+    throw new Error(
+      "Invalid api_key"
+    );
+  }
+
+
+  var application =
+    applications[0];
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | CHECK API KEY AGAIN
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    application.api_key !==
+    apiKey
+  ) {
+    throw new Error(
+      "Invalid api_key"
+    );
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | CHECK DOMAIN
+  |--------------------------------------------------------------------------
+  */
+
+  var applicationDomain =
+    normalizeDomain(
+      application.domain
+    );
+
+  if (
+    !applicationDomain
+  ) {
+    throw new Error(
+      "Application domain is not configured"
+    );
+  }
+
+  if (
+    applicationDomain !==
+    incomingDomain
+  ) {
+    throw new Error(
+      "Domain does not match this api_key"
+    );
+  }
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | USER ID REQUIRED
+  |--------------------------------------------------------------------------
+  |
+  | The Reportli account owner is
+  | NEVER trusted from the browser.
+  |
+  | It comes from:
+  |
+  | api_key
+  |   ↓
+  | applications
+  |   ↓
+  | applications.user_id
+  |
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    !application.user_id
+  ) {
+    throw new Error(
+      "Application is not connected to a Reportli user"
+    );
+  }
+
+
+  return {
+    application:
+      application,
+
+    user_id:
+      application.user_id,
+
+    api_key:
+      apiKey,
+
+    domain:
+      incomingDomain
+  };
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| BUILD HUMAN-READABLE ACTIVITY
+|--------------------------------------------------------------------------
+*/
+
+function buildActivityMessage(
+  event
+) {
+  var eventName =
+    event &&
+    event.event_name
+      ? event.event_name
+      : "";
 
   if (
     eventName ===
     "SESSION_STARTED"
   ) {
-    activityText =
-      "Session started";
+    return "Session started";
+  }
 
-  } else if (
+
+  if (
     eventName ===
     "SESSION_END"
   ) {
-    activityText =
-      "Session ended";
+    return "Session ended";
+  }
 
-  } else if (
+
+  if (
     eventName ===
     "page_view"
   ) {
-    let path =
-      inner.page ||
-      inner.url ||
+    var path =
+      event.page ||
+      event.url ||
       "";
 
     try {
       if (
         path &&
-        path.indexOf(
-          "http"
-        ) === 0
+        path.indexOf("http") === 0
       ) {
         path =
           new URL(
@@ -2010,25 +2169,28 @@ function buildActivityString(
       }
     } catch (e) {}
 
-    activityText =
+    return (
       "Viewed " +
       (
         path ||
         "unknown page"
-      );
+      )
+    );
+  }
 
-  } else if (
+
+  if (
     eventName ===
     "click"
   ) {
-    const label =
-      inner.label ||
-      "(no label)";
+    var label =
+      event.label ||
+      "";
 
-    const element =
-      inner.element &&
-      inner.element.tag
-        ? inner.element.tag
+    var element =
+      event.element &&
+      event.element.tag
+        ? event.element.tag
         : "element";
 
     if (
@@ -2036,178 +2198,308 @@ function buildActivityString(
       label !==
         "(no label)"
     ) {
-      activityText =
+      return (
         'Clicked "' +
         label +
-        '"';
-    } else {
-      activityText =
-        "Clicked " +
-        element;
+        '"'
+      );
     }
 
-  } else if (
-    eventName ===
-    "navigation"
-  ) {
-    const from =
-      inner.from ||
-      "unknown";
-
-    const to =
-      inner.to ||
-      "unknown";
-
-    activityText =
-      "Navigated " +
-      from +
-      " \u2192 " +
-      to;
-
-  } else if (
-    eventName ===
-    "identify"
-  ) {
-    activityText =
-      "Identified as " +
-      (
-        inner.email ||
-        inner.user_id ||
-        "unknown user"
-      );
-
-  } else if (
-    eventName ===
-    "error_occurred"
-  ) {
-    activityText =
-      "error occurred";
-
-  } else {
-    /*
-    Unknown event name -
-    fall back to a safe
-    generic string, never
-    raw JSON.
-    */
-
-    activityText =
-      eventName ||
-      "Activity";
-  }
-
-  if (
-    localTime
-  ) {
     return (
-      localTime +
-      "   " +
-      activityText
+      "Clicked " +
+      element
     );
   }
 
-  return activityText;
+
+  if (
+    eventName ===
+    "navigation"
+  ) {
+    return (
+      "Navigated " +
+      (
+        event.from ||
+        "unknown"
+      ) +
+      " → " +
+      (
+        event.to ||
+        "unknown"
+      )
+    );
+  }
+
+
+  if (
+    eventName ===
+    "identify"
+  ) {
+    return (
+      "Identified as " +
+      (
+        event.email ||
+        event.user_id ||
+        "unknown user"
+      )
+    );
+  }
+
+
+  if (
+    eventName ===
+    "error_occurred"
+  ) {
+    return "Error occurred";
+  }
+
+
+  return (
+    eventName ||
+    "Activity"
+  );
 }
+
 
 /*
 |--------------------------------------------------------------------------
 | SAVE ACTIVITY
 |--------------------------------------------------------------------------
+|
+| TABLE:
+|
+| user_activity
+|
+| id          -> automatic
+| user_id     -> applications.user_id
+| session_id
+| time        -> event timestamp
+| event       -> JSONB
+| api_key
+|
+|--------------------------------------------------------------------------
 */
 
 async function saveActivity(
   env,
-  event
+  event,
+  applicationInfo
 ) {
-  const activityString =
-    buildActivityString(
+  var eventTime =
+    event.time ||
+    event.timestamp ||
+    new Date().toISOString();
+
+
+  var activityMessage =
+    buildActivityMessage(
       event
     );
 
-  const activity = {
-    api_key:
-      event.api_key ||
+
+  /*
+  |--------------------------------------------------------------------------
+  | IMPORTANT
+  |--------------------------------------------------------------------------
+  |
+  | event column is JSONB.
+  |
+  | Therefore we save a JSON
+  | object, NOT a string.
+  |
+  |--------------------------------------------------------------------------
+  */
+
+  var eventJson = {
+    event_name:
+      event.event_name ||
+      "activity",
+
+    message:
+      activityMessage,
+
+    local_time_display:
+      event.local_time_display ||
       null,
+
+    domain:
+      applicationInfo.domain,
+
+    page:
+      event.page ||
+      event.url ||
+      null,
+
+    email:
+      event.email ||
+      null,
+
+    customer_user_id:
+      event.user_id ||
+      null
+  };
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Preserve useful event-specific
+  | information.
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    event.label
+  ) {
+    eventJson.label =
+      event.label;
+  }
+
+  if (
+    event.element
+  ) {
+    eventJson.element =
+      event.element;
+  }
+
+  if (
+    event.from
+  ) {
+    eventJson.from =
+      event.from;
+  }
+
+  if (
+    event.to
+  ) {
+    eventJson.to =
+      event.to;
+  }
+
+  if (
+    event.duration_ms !=
+      null
+  ) {
+    eventJson.duration_ms =
+      event.duration_ms;
+  }
+
+  if (
+    event.started_at
+  ) {
+    eventJson.started_at =
+      event.started_at;
+  }
+
+
+  var activityRow = {
+    user_id:
+      applicationInfo.user_id,
 
     session_id:
       event.session_id ||
       null,
 
+    time:
+      eventTime,
+
     event:
-      activityString
+      eventJson,
+
+    api_key:
+      applicationInfo.api_key
   };
+
 
   await insertSupabase(
     env,
     "user_activity",
-    activity
+    activityRow
   );
+
+  return true;
 }
+
 
 /*
 |--------------------------------------------------------------------------
-| SAVE ERROR-TRIGGERED ACTIVITY ROW
-|--------------------------------------------------------------------------
-|
-| Every saved error also creates a
-| companion row in user_activity so
-| it shows in the timeline as:
-|
-| 09:17 AM   error occurred
-|
+| SAVE ERROR ACTIVITY
 |--------------------------------------------------------------------------
 */
 
 async function saveErrorActivity(
   env,
-  event
+  event,
+  applicationInfo
 ) {
-  const wrapper = {
-    api_key:
-      event.api_key ||
+  var errorActivity = {
+    event_name:
+      "error_occurred",
+
+    local_time_display:
+      event.local_time_display ||
       null,
+
+    page:
+      event.page ||
+      null,
+
+    error_message:
+      event.error_message ||
+      "Unknown error",
+
+    context:
+      event.context ||
+      "unknown"
+  };
+
+
+  var activityRow = {
+    user_id:
+      applicationInfo.user_id,
 
     session_id:
       event.session_id ||
       null,
 
-    event: {
-      event_name:
-        "error_occurred",
+    time:
+      event.timestamp ||
+      new Date().toISOString(),
 
-      local_time_display:
-        event.local_time_display ||
-        ""
-    }
+    event:
+      errorActivity,
+
+    api_key:
+      applicationInfo.api_key
   };
 
-  await saveActivity(
+
+  await insertSupabase(
     env,
-    wrapper
+    "user_activity",
+    activityRow
   );
+
+  return true;
 }
+
 
 /*
 |--------------------------------------------------------------------------
 | SARVAM AI - ERROR ANALYSIS
 |--------------------------------------------------------------------------
 |
-| Generates the plain-paragraph
-| analysis format:
+| Current Sarvam endpoint:
 |
-| [explanation]
+| POST /v1/chat/completions
 |
-| Cause:
-| [cause]
+| Model:
 |
-| Recommended:
-| [recommendation]
+| sarvam-105b
 |
-| Location:
-| file:line:col
-|
-| Stack trace:
-| [stack]
+| We explicitly disable reasoning
+| for this short production-error
+| explanation so the answer does not
+| consume the whole max_tokens budget.
 |
 |--------------------------------------------------------------------------
 */
@@ -2216,7 +2508,7 @@ async function generateAiAnalysis(
   env,
   event
 ) {
-  const location =
+  var location =
     (
       event.file_name ||
       "unknown"
@@ -2236,77 +2528,117 @@ async function generateAiAnalysis(
         : "?"
     );
 
-  const stack =
+
+  var stack =
     event.stack_trace ||
     "No stack trace available";
+
+
+  var errorMessage =
+    event.error_message ||
+    "Unknown error";
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | SARVAM KEY MISSING
+  |--------------------------------------------------------------------------
+  */
 
   if (
     !env.SARVAM_API_KEY
   ) {
-    /*
-    Fail safe - never crash
-    the save if Sarvam is
-    not configured.
-    */
+    console.error(
+      "SARVAM_API_KEY is missing"
+    );
 
     return (
-      (
-        event.error_message ||
-        "An error occurred."
-      ) +
-      "\n\nCause:\nUnknown - Sarvam AI is not configured.\n\nRecommended:\nCheck the Worker environment variables.\n\nLocation:\n" +
+      errorMessage +
+      "\n\nCause:\n" +
+      "AI analysis is unavailable because SARVAM_API_KEY is not configured." +
+      "\n\nRecommended:\n" +
+      "Configure SARVAM_API_KEY in the Cloudflare Worker secrets." +
+      "\n\nLocation:\n" +
       location +
       "\n\nStack trace:\n" +
       stack
     );
   }
 
-  try {
-    const prompt =
-      "You are an expert software engineer. Analyze this production error and respond in EXACTLY this plain text format with no markdown, no headers with #, no emoji:\n\n" +
-      "[One or two sentence plain English explanation of what happened and why, written as flowing prose]\n\n" +
-      "Cause:\n" +
-      "[One or two sentence explanation of the root cause]\n\n" +
-      "Recommended:\n" +
-      "[One or two sentence actionable recommendation]\n\n" +
-      "Location:\n" +
-      location +
-      "\n\n" +
-      "Stack trace:\n" +
-      stack +
-      "\n\n" +
-      "Error message: " +
-      (
-        event.error_message ||
-        "Unknown error"
-      ) +
-      "\nContext: " +
-      (
-        event.context ||
-        "unknown"
-      ) +
-      "\nPage: " +
-      (
-        event.page ||
-        "unknown"
-      ) +
-      "\n\nRespond with ONLY the formatted analysis text, nothing else. Do not repeat the Location or Stack trace sections differently than shown above - use the exact location and stack trace given.";
 
-    const sarvamResponse =
+  /*
+  |--------------------------------------------------------------------------
+  | PROMPT
+  |--------------------------------------------------------------------------
+  */
+
+  var prompt =
+    "You are an expert production software engineer analyzing a real application error.\n\n" +
+
+    "Analyze the error using the error message, stack trace, context, page, and exact code location.\n\n" +
+
+    "Your answer MUST use exactly this structure:\n\n" +
+
+    "[One or two concise sentences explaining what happened and why.]\n\n" +
+
+    "Cause:\n" +
+    "[One or two concise sentences explaining the likely root cause.]\n\n" +
+
+    "Recommended:\n" +
+    "[One or two concise actionable sentences explaining what the developer should check or change.]\n\n" +
+
+    "Location:\n" +
+    location +
+    "\n\n" +
+
+    "Stack trace:\n" +
+    stack +
+    "\n\n" +
+
+    "Rules:\n" +
+    "- Plain text only.\n" +
+    "- No Markdown.\n" +
+    "- No # headings.\n" +
+    "- No emojis.\n" +
+    "- Do not invent facts that are not supported by the error.\n" +
+    "- If the exact root cause cannot be known, say it is likely or unknown.\n" +
+    "- Do not modify the Location section.\n" +
+    "- Do not modify the Stack trace section.\n" +
+    "- Return ONLY the final analysis.\n\n" +
+
+    "Error message:\n" +
+    errorMessage +
+    "\n\n" +
+
+    "Context:\n" +
+    (
+      event.context ||
+      "unknown"
+    ) +
+    "\n\n" +
+
+    "Page:\n" +
+    (
+      event.page ||
+      "unknown"
+    );
+
+
+  try {
+    var sarvamResponse =
       await fetch(
         "https://api.sarvam.ai/v1/chat/completions",
         {
           method:
             "POST",
 
-          headers:
-            {
-              "Content-Type":
-                "application/json",
+          headers: {
+            "Content-Type":
+              "application/json",
 
-              "api-subscription-key":
-                env.SARVAM_API_KEY
-            },
+            "api-subscription-key":
+              env.SARVAM_API_KEY
+          },
 
           body:
             JSON.stringify(
@@ -2325,61 +2657,136 @@ async function generateAiAnalysis(
                     }
                   ],
 
+                /*
+                Important:
+                Disable reasoning for
+                this short explanation.
+                */
+
+                reasoning_effort:
+                  null,
+
                 max_tokens:
-                  700,
+                  1000,
 
                 temperature:
-                  0.3
+                  0.2
               }
             )
         }
       );
 
-    const sarvamData =
-      await sarvamResponse.json();
 
-    const content =
+    /*
+    |--------------------------------------------------------------------------
+    | CHECK HTTP STATUS
+    |--------------------------------------------------------------------------
+    */
+
+    var responseText =
+      await sarvamResponse.text();
+
+
+    if (
+      !sarvamResponse.ok
+    ) {
+      console.error(
+        "SARVAM HTTP ERROR",
+        {
+          status:
+            sarvamResponse.status,
+
+          response:
+            responseText
+        }
+      );
+
+      throw new Error(
+        "Sarvam HTTP " +
+          sarvamResponse.status +
+          ": " +
+          responseText
+      );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | PARSE RESPONSE
+    |--------------------------------------------------------------------------
+    */
+
+    var sarvamData;
+
+    try {
+      sarvamData =
+        JSON.parse(
+          responseText
+        );
+
+    } catch (e) {
+      throw new Error(
+        "Sarvam returned invalid JSON"
+      );
+    }
+
+
+    var content =
       sarvamData &&
       sarvamData.choices &&
       sarvamData.choices[0] &&
-      sarvamData.choices[0]
-        .message
+      sarvamData.choices[0].message
         ? sarvamData
             .choices[0]
             .message
             .content
         : null;
 
+
     if (
-      content &&
-      content.trim()
+      !content ||
+      !String(content).trim()
     ) {
-      return content.trim();
+      throw new Error(
+        "Sarvam returned an empty response"
+      );
     }
 
-    throw new Error(
-      "Empty Sarvam AI response"
-    );
-
-  } catch (e) {
-    console.error(
-      "Sarvam AI error:",
-      e.message
-    );
 
     /*
-    Fail safe fallback -
-    still gives a usable
-    analysis even if Sarvam
-    AI fails.
+    |--------------------------------------------------------------------------
+    | CLEAN RESPONSE
+    |--------------------------------------------------------------------------
+    */
+
+    return String(
+      content
+    ).trim();
+
+
+  } catch (error) {
+    console.error(
+      "Sarvam AI analysis failed:",
+      error &&
+        error.message
+        ? error.message
+        : error
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SAFE FALLBACK
+    |--------------------------------------------------------------------------
     */
 
     return (
-      (
-        event.error_message ||
-        "An error occurred."
-      ) +
-      "\n\nCause:\nUnable to determine automatically - AI analysis failed.\n\nRecommended:\nReview the stack trace below manually.\n\nLocation:\n" +
+      errorMessage +
+      "\n\nCause:\n" +
+      "Unable to determine the root cause automatically because AI analysis failed." +
+      "\n\nRecommended:\n" +
+      "Review the error message, exact location, and stack trace manually." +
+      "\n\nLocation:\n" +
       location +
       "\n\nStack trace:\n" +
       stack
@@ -2387,72 +2794,78 @@ async function generateAiAnalysis(
   }
 }
 
+
 /*
 |--------------------------------------------------------------------------
 | SAVE ERROR
 |--------------------------------------------------------------------------
 |
-| ACTUAL DATABASE SCHEMA:
+| TABLE:
 |
 | errors
-| ├── id
-| ├── api_key
-| ├── error_message
-| ├── timestamp
-| └── ai_analysis
+|
+| id
+| api_key
+| error_message
+| timestamp
+| ai_analysis
+| user_id
 |
 |--------------------------------------------------------------------------
 */
 
 async function saveError(
   env,
-  event
+  event,
+  applicationInfo
 ) {
   /*
   |--------------------------------------------------------------------------
-  | Generate error ID
+  | ERROR ID
   |--------------------------------------------------------------------------
   */
 
-  const errorId =
+  var errorId =
     "err_" +
     crypto.randomUUID();
 
+
   /*
   |--------------------------------------------------------------------------
-  | Timestamp
+  | TIMESTAMP
   |--------------------------------------------------------------------------
   */
 
-  const timestamp =
+  var timestamp =
     event.timestamp ||
     new Date().toISOString();
 
+
   /*
   |--------------------------------------------------------------------------
-  | AI ANALYSIS (Sarvam AI)
+  | AI ANALYSIS
   |--------------------------------------------------------------------------
   */
 
-  const aiAnalysis =
+  var aiAnalysis =
     await generateAiAnalysis(
       env,
       event
     );
 
+
   /*
   |--------------------------------------------------------------------------
-  | DATABASE INSERT
+  | ERROR ROW
   |--------------------------------------------------------------------------
   */
 
-  const errorRow = {
+  var errorRow = {
     id:
       errorId,
 
     api_key:
-      event.api_key ||
-      null,
+      applicationInfo.api_key,
 
     error_message:
       event.error_message ||
@@ -2462,8 +2875,12 @@ async function saveError(
       timestamp,
 
     ai_analysis:
-      aiAnalysis
+      aiAnalysis,
+
+    user_id:
+      applicationInfo.user_id
   };
+
 
   console.log(
     "Saving Reportli error:",
@@ -2472,7 +2889,10 @@ async function saveError(
         errorId,
 
       api_key:
-        event.api_key,
+        applicationInfo.api_key,
+
+      user_id:
+        applicationInfo.user_id,
 
       error_message:
         event.error_message,
@@ -2482,42 +2902,58 @@ async function saveError(
     }
   );
 
+
+  /*
+  |--------------------------------------------------------------------------
+  | INSERT ERROR
+  |--------------------------------------------------------------------------
+  */
+
   await insertSupabase(
     env,
     "errors",
     errorRow
   );
 
-  console.log(
-    "Reportli error saved successfully:",
-    errorId
-  );
 
   /*
   |--------------------------------------------------------------------------
-  | COMPANION ACTIVITY ROW
+  | COMPANION ACTIVITY
   |--------------------------------------------------------------------------
-  |
-  | Shows "error occurred" in the
-  | timeline alongside the full
-  | error record.
-  |
   */
 
   try {
     await saveErrorActivity(
       env,
-      event
+      event,
+      applicationInfo
     );
-  } catch (e) {
+
+  } catch (error) {
+    /*
+    The actual error record
+    has already been saved.
+    */
+
     console.error(
-      "Failed to save error activity row:",
-      e.message
+      "Error activity insert failed:",
+      error &&
+        error.message
+        ? error.message
+        : error
     );
   }
 
+
+  console.log(
+    "Reportli error saved successfully:",
+    errorId
+  );
+
+
   return true;
 }
+
 
 /*
 |--------------------------------------------------------------------------
@@ -2535,9 +2971,23 @@ async function processEvent(
     );
   }
 
+
   /*
   |--------------------------------------------------------------------------
-  | ERROR EVENT
+  | VALIDATE API KEY + DOMAIN FIRST
+  |--------------------------------------------------------------------------
+  */
+
+  var applicationInfo =
+    await validateApplication(
+      env,
+      event
+    );
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | ERROR
   |--------------------------------------------------------------------------
   */
 
@@ -2547,7 +2997,8 @@ async function processEvent(
   ) {
     await saveError(
       env,
-      event
+      event,
+      applicationInfo
     );
 
     return {
@@ -2559,16 +3010,19 @@ async function processEvent(
     };
   }
 
+
   /*
   |--------------------------------------------------------------------------
-  | ACTIVITY EVENT
+  | ACTIVITY
   |--------------------------------------------------------------------------
   */
 
   await saveActivity(
     env,
-    event
+    event,
+    applicationInfo
   );
+
 
   return {
     success:
@@ -2579,6 +3033,7 @@ async function processEvent(
   };
 }
 
+
 /*
 |--------------------------------------------------------------------------
 | MAIN WORKER
@@ -2586,13 +3041,15 @@ async function processEvent(
 */
 
 export default {
+
   async fetch(
     request,
     env
   ) {
+
     /*
     |--------------------------------------------------------------------------
-    | Validate environment
+    | ENVIRONMENT CHECK
     |--------------------------------------------------------------------------
     */
 
@@ -2613,16 +3070,16 @@ export default {
           status:
             500,
 
-          headers:
-            {
-              "Content-Type":
-                "application/json",
+          headers: {
+            "Content-Type":
+              "application/json",
 
-              ...corsHeaders()
-            }
+            ...corsHeaders()
+          }
         }
       );
     }
+
 
     if (
       !env.SUPABASE_SERVICE_ROLE_KEY
@@ -2641,16 +3098,16 @@ export default {
           status:
             500,
 
-          headers:
-            {
-              "Content-Type":
-                "application/json",
+          headers: {
+            "Content-Type":
+              "application/json",
 
-              ...corsHeaders()
-            }
+            ...corsHeaders()
+          }
         }
       );
     }
+
 
     /*
     |--------------------------------------------------------------------------
@@ -2658,10 +3115,11 @@ export default {
     |--------------------------------------------------------------------------
     */
 
-    const url =
+    var url =
       new URL(
         request.url
       );
+
 
     /*
     |--------------------------------------------------------------------------
@@ -2685,9 +3143,10 @@ export default {
       );
     }
 
+
     /*
     |--------------------------------------------------------------------------
-    | SERVE REPORTLI SDK
+    | SERVE SDK
     |--------------------------------------------------------------------------
     */
 
@@ -2707,19 +3166,19 @@ export default {
           status:
             200,
 
-          headers:
-            {
-              "Content-Type":
-                "application/javascript; charset=UTF-8",
+          headers: {
+            "Content-Type":
+              "application/javascript; charset=UTF-8",
 
-              "Cache-Control":
-                "public, max-age=300",
+            "Cache-Control":
+              "public, max-age=300",
 
-              ...corsHeaders()
-            }
+            ...corsHeaders()
+          }
         }
       );
     }
+
 
     /*
     |--------------------------------------------------------------------------
@@ -2750,16 +3209,16 @@ export default {
           status:
             200,
 
-          headers:
-            {
-              "Content-Type":
-                "application/json",
+          headers: {
+            "Content-Type":
+              "application/json",
 
-              ...corsHeaders()
-            }
+            ...corsHeaders()
+          }
         }
       );
     }
+
 
     /*
     |--------------------------------------------------------------------------
@@ -2772,8 +3231,14 @@ export default {
       "POST"
     ) {
       try {
-        const body =
+
+        /*
+        Parse JSON.
+        */
+
+        var body =
           await request.json();
+
 
         /*
         |--------------------------------------------------------------------------
@@ -2789,15 +3254,28 @@ export default {
             body.events
           )
         ) {
-          const results =
+
+          var results =
             [];
 
           for (
-            const event of
-              body.events
+            var i = 0;
+            i <
+              body.events.length;
+            i++
           ) {
+
+            var event =
+              body.events[i];
+
             try {
-              const result =
+
+              /*
+              Each event is independently
+              validated before processing.
+              */
+
+              var result =
                 await processEvent(
                   env,
                   event
@@ -2807,12 +3285,14 @@ export default {
                 result
               );
 
-            } catch (
-              error
-            ) {
+            } catch (error) {
+
               console.error(
                 "Batch event failed:",
-                error
+                error &&
+                  error.message
+                  ? error.message
+                  : error
               );
 
               results.push(
@@ -2821,12 +3301,15 @@ export default {
                     false,
 
                   error:
-                    error.message ||
-                    "Event processing failed"
+                    error &&
+                      error.message
+                      ? error.message
+                      : "Event processing failed"
                 }
               );
             }
           }
+
 
           return new Response(
             JSON.stringify(
@@ -2845,16 +3328,16 @@ export default {
               status:
                 200,
 
-              headers:
-                {
-                  "Content-Type":
-                    "application/json",
+              headers: {
+                "Content-Type":
+                  "application/json",
 
-                  ...corsHeaders()
-                }
+                ...corsHeaders()
+              }
             }
           );
         }
+
 
         /*
         |--------------------------------------------------------------------------
@@ -2862,11 +3345,12 @@ export default {
         |--------------------------------------------------------------------------
         */
 
-        const result =
+        var result =
           await processEvent(
             env,
             body
           );
+
 
         return new Response(
           JSON.stringify(
@@ -2876,23 +3360,26 @@ export default {
             status:
               200,
 
-            headers:
-              {
-                "Content-Type":
-                  "application/json",
+            headers: {
+              "Content-Type":
+                "application/json",
 
-                ...corsHeaders()
-              }
+              ...corsHeaders()
+            }
           }
         );
 
-      } catch (
-        error
-      ) {
+
+      } catch (error) {
+
         console.error(
           "Reportli Worker error:",
-          error
+          error &&
+            error.message
+            ? error.message
+            : error
         );
+
 
         return new Response(
           JSON.stringify(
@@ -2901,25 +3388,27 @@ export default {
                 false,
 
               error:
-                error.message ||
-                "Internal server error"
+                error &&
+                  error.message
+                  ? error.message
+                  : "Internal server error"
             }
           ),
           {
             status:
               500,
 
-            headers:
-              {
-                "Content-Type":
-                  "application/json",
+            headers: {
+              "Content-Type":
+                "application/json",
 
-                ...corsHeaders()
-              }
+              ...corsHeaders()
+            }
           }
         );
       }
     }
+
 
     /*
     |--------------------------------------------------------------------------
@@ -2941,13 +3430,12 @@ export default {
         status:
           404,
 
-        headers:
-          {
-            "Content-Type":
-              "application/json",
+        headers: {
+          "Content-Type":
+            "application/json",
 
-            ...corsHeaders()
-          }
+          ...corsHeaders()
+        }
       }
     );
   }
