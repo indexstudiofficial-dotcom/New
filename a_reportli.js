@@ -1,7 +1,5 @@
 /*
-|--------------------------------------------------------------------------
 | REPORTLI AI - SESSION TRACKING CLOUDFLARE WORKER
-|--------------------------------------------------------------------------
 |
 | ROUTES:
 |   GET  /                 Health check
@@ -10,29 +8,19 @@
 |   POST /                 Event ingestion
 |   OPTIONS                CORS preflight
 |
-| SUPABASE TABLES:
-|   applications
-|   user_subscriptions
-|   user_activity
+| SUPABASE TABLES: applications, user_subscriptions, user_activity
 |
-| IMPORTANT:
-|   - Supports https://, http:// and hostname-only domains.
-|   - Supports www and non-www domains as equivalent.
-|   - Supports trailing slashes and page paths.
-|   - API key must match exactly.
-|   - user_activity insert does NOT include status.
-|--------------------------------------------------------------------------
+| ACCEPTANCE RULE:
+|   An event is accepted when the API key matches an application AND the
+|   event's hostname equals that application's `subdomain` OR `domain`.
+|   (http/https, www, trailing slashes and paths are ignored.)
 */
 
 const WORKER_URL =
   "https://reportliai-sbs.reportliaihq.workers.dev";
 
 
-/*
-|--------------------------------------------------------------------------
-| BROWSER SDK
-|--------------------------------------------------------------------------
-*/
+/* ------------------------------ BROWSER SDK ------------------------------ */
 
 const REPORTLI_JS = String.raw`
 (function () {
@@ -43,12 +31,6 @@ const REPORTLI_JS = String.raw`
   window.__REPORTLI_LOADED__ = true;
 
   var WORKER_URL = "${WORKER_URL}";
-
-  /*
-  |--------------------------------------------------------------------------
-  | GET API KEY
-  |--------------------------------------------------------------------------
-  */
 
   function getApiKey() {
     try {
@@ -93,12 +75,6 @@ const REPORTLI_JS = String.raw`
 
   var API_KEY = getApiKey();
 
-  /*
-  |--------------------------------------------------------------------------
-  | SESSION
-  |--------------------------------------------------------------------------
-  */
-
   var SESSION_ID =
     "sess_" +
     Math.random().toString(36).substring(2) +
@@ -108,13 +84,6 @@ const REPORTLI_JS = String.raw`
   var SESSION_STARTED_AT = Date.now();
 
   var SESSION_ENDED = false;
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | USER DETECTION
-  |--------------------------------------------------------------------------
-  */
 
   function detectUser() {
     try {
@@ -132,13 +101,6 @@ const REPORTLI_JS = String.raw`
     };
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | BROWSER INFORMATION
-  |--------------------------------------------------------------------------
-  */
-
   function getBrowser() {
     try {
       return navigator.userAgent || "unknown";
@@ -146,13 +108,6 @@ const REPORTLI_JS = String.raw`
       return "unknown";
     }
   }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | LOCAL TIME
-  |--------------------------------------------------------------------------
-  */
 
   function getLocalTimeDisplay() {
     try {
@@ -166,13 +121,6 @@ const REPORTLI_JS = String.raw`
     }
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | DOMAIN
-  |--------------------------------------------------------------------------
-  */
-
   function getDomain() {
     try {
       return window.location.hostname
@@ -183,13 +131,6 @@ const REPORTLI_JS = String.raw`
       return "";
     }
   }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | BASE EVENT FIELDS
-  |--------------------------------------------------------------------------
-  */
 
   function baseFields() {
     var user = detectUser();
@@ -206,13 +147,6 @@ const REPORTLI_JS = String.raw`
       local_time_display: getLocalTimeDisplay()
     };
   }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | SEND EVENT
-  |--------------------------------------------------------------------------
-  */
 
   function send(payload, useBeacon) {
     if (!API_KEY) return;
@@ -248,13 +182,6 @@ const REPORTLI_JS = String.raw`
     } catch (e) {}
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | ACTIVITY TRACKING
-  |--------------------------------------------------------------------------
-  */
-
   function track(eventName, data) {
     try {
       var eventPayload = Object.assign(
@@ -276,13 +203,6 @@ const REPORTLI_JS = String.raw`
     } catch (e) {}
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | API KEY VALIDATION
-  |--------------------------------------------------------------------------
-  */
-
   if (!API_KEY) {
     console.warn(
       "Reportli: API key not found. Add api_key=\"YOUR_KEY\" to the Reportli script tag."
@@ -291,35 +211,14 @@ const REPORTLI_JS = String.raw`
     return;
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | SESSION STARTED
-  |--------------------------------------------------------------------------
-  */
-
   track("SESSION_STARTED", {
     started_at: new Date().toISOString()
   });
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | INITIAL PAGE VIEW
-  |--------------------------------------------------------------------------
-  */
 
   track("page_view", {
     url: window.location.href,
     title: document.title
   });
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | ELEMENT INFORMATION
-  |--------------------------------------------------------------------------
-  */
 
   function getElementInfo(element) {
     try {
@@ -371,13 +270,6 @@ const REPORTLI_JS = String.raw`
     }
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | CLICK TRACKING
-  |--------------------------------------------------------------------------
-  */
-
   document.addEventListener(
     "click",
     function (event) {
@@ -416,13 +308,6 @@ const REPORTLI_JS = String.raw`
     true
   );
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | PAGE VIEW
-  |--------------------------------------------------------------------------
-  */
-
   function trackPageView() {
     try {
       track("page_view", {
@@ -431,13 +316,6 @@ const REPORTLI_JS = String.raw`
       });
     } catch (e) {}
   }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | SPA NAVIGATION
-  |--------------------------------------------------------------------------
-  */
 
   var CURRENT_PATH = window.location.pathname;
 
@@ -461,13 +339,6 @@ const REPORTLI_JS = String.raw`
     } catch (e) {}
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | HISTORY PUSH STATE
-  |--------------------------------------------------------------------------
-  */
-
   try {
     var originalPushState = history.pushState;
 
@@ -483,13 +354,6 @@ const REPORTLI_JS = String.raw`
     };
 
   } catch (e) {}
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | HISTORY REPLACE STATE
-  |--------------------------------------------------------------------------
-  */
 
   try {
     var originalReplaceState = history.replaceState;
@@ -507,36 +371,15 @@ const REPORTLI_JS = String.raw`
 
   } catch (e) {}
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | POPSTATE
-  |--------------------------------------------------------------------------
-  */
-
   window.addEventListener(
     "popstate",
     handleNavigation
   );
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | HASH CHANGE
-  |--------------------------------------------------------------------------
-  */
-
   window.addEventListener(
     "hashchange",
     trackPageView
   );
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | PUBLIC REPORTLI API
-  |--------------------------------------------------------------------------
-  */
 
   window.Reportli = {
 
@@ -569,13 +412,6 @@ const REPORTLI_JS = String.raw`
 
   };
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | SESSION END
-  |--------------------------------------------------------------------------
-  */
-
   function endSession() {
     if (SESSION_ENDED) return;
 
@@ -606,13 +442,6 @@ const REPORTLI_JS = String.raw`
     } catch (e) {}
   }
 
-
-  /*
-  |--------------------------------------------------------------------------
-  | PAGE HIDE
-  |--------------------------------------------------------------------------
-  */
-
   window.addEventListener(
     "pagehide",
     endSession
@@ -622,11 +451,7 @@ const REPORTLI_JS = String.raw`
 `;
 
 
-/*
-|--------------------------------------------------------------------------
-| CORS HEADERS
-|--------------------------------------------------------------------------
-*/
+/* --------------------------------- CORS ---------------------------------- */
 
 function corsHeaders() {
   return {
@@ -644,44 +469,32 @@ function corsHeaders() {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| NORMALIZE DOMAIN
-|--------------------------------------------------------------------------
-|
-| ACCEPTS:
-|   https://example.com
-|   http://example.com
-|   example.com
-|   www.example.com
-|   example.com/
-|   example.com/dashboard
-|
-| www and non-www are treated as equivalent.
-|--------------------------------------------------------------------------
-*/
+/* ---------------------------- NORMALIZE DOMAIN --------------------------- */
+/* Accepts https://x.com, http://x.com, x.com, www.x.com, x.com/, x.com/path.
+   www and non-www are treated as equivalent. */
 
 function normalizeDomain(domain) {
-  if (typeof domain !== "string") {
-    return "";
-  }
+  if (typeof domain !== "string") return "";
 
   try {
-    var value = domain.trim().toLowerCase();
+    var value = domain
+      .trim()
+      .toLowerCase()
+      .replace(/^["']+|["']+$/g, "");   // stray quotes
 
     if (!value) return "";
 
-    // Add protocol when missing.
-    if (!/^https?:\/\//i.test(value)) {
-      value = "https://" + value;
-    }
+    // Remove any scheme (http://, https://, //) so URL() can parse it.
+    value = value
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+      .replace(/^\/\//, "");
 
-    var hostname = new URL(value).hostname
-      .toLowerCase()
-      .replace(/\.$/, "");
+    // URL() drops user:pass@, port, path, query and hash.
+    var hostname = new URL("https://" + value).hostname
+      .replace(/\.+$/, "");            // trailing dot
 
-    // www and non-www are equivalent.
-    hostname = hostname.replace(/^www\./, "");
+    // www and non-www are equivalent (also repeated www.)
+    hostname = hostname.replace(/^(?:www\.)+/, "");
 
     return hostname;
 
@@ -691,11 +504,7 @@ function normalizeDomain(domain) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| SUPABASE REQUEST
-|--------------------------------------------------------------------------
-*/
+/* ------------------------------- SUPABASE -------------------------------- */
 
 async function supabaseRequest(env, path, options) {
   if (!env.SUPABASE_URL) {
@@ -724,13 +533,6 @@ async function supabaseRequest(env, path, options) {
     }
   });
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| SUPABASE INSERT
-|--------------------------------------------------------------------------
-*/
 
 async function insertSupabase(env, table, data) {
   var response = await supabaseRequest(
@@ -771,18 +573,10 @@ async function insertSupabase(env, table, data) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| GET APPLICATION
-|--------------------------------------------------------------------------
-|
-| 1. Find application using exact API key.
-| 2. Normalize incoming domain.
-| 3. Normalize stored domain.
-| 4. Compare both normalized domains.
-|
-|--------------------------------------------------------------------------
-*/
+/* ---------------------------- GET APPLICATION ---------------------------- */
+/* 1. Find application(s) by exact API key.
+   2. Normalize the incoming hostname.
+   3. Accept if it equals the normalized `subdomain` OR `domain`. */
 
 async function getApplicationForEvent(env, event, request) {
   var apiKey =
@@ -790,7 +584,6 @@ async function getApplicationForEvent(env, event, request) {
       ? event.api_key.trim()
       : "";
 
-  // Header fallback.
   if (!apiKey && request && request.headers) {
     apiKey = (
       request.headers.get("x-api-key") || ""
@@ -801,7 +594,6 @@ async function getApplicationForEvent(env, event, request) {
     throw new Error("API key is required");
   }
 
-  // Get incoming domain.
   var domain = normalizeDomain(
     event.domain ||
     (
@@ -811,7 +603,6 @@ async function getApplicationForEvent(env, event, request) {
     ""
   );
 
-  // Origin fallback.
   if (!domain && request && request.headers) {
     domain = normalizeDomain(
       request.headers.get("Origin") || ""
@@ -822,9 +613,8 @@ async function getApplicationForEvent(env, event, request) {
     throw new Error("Domain is required");
   }
 
-  // Search by API key only.
   var params = new URLSearchParams({
-    select: "id,name,api_key,user_id,domain",
+    select: "id,name,api_key,user_id,domain,subdomain",
     api_key: "eq." + apiKey,
     limit: "10"
   });
@@ -862,17 +652,26 @@ async function getApplicationForEvent(env, event, request) {
     throw new Error("Invalid API key or domain");
   }
 
-  // Compare normalized domains.
+  // Accept when the hostname matches the subdomain OR the domain column.
   var application = rows.find(function (row) {
-    return normalizeDomain(row.domain) === domain;
+    var sub = normalizeDomain(row.subdomain);
+    var dom = normalizeDomain(row.domain);
+
+    return (
+      (sub && sub === domain) ||
+      (dom && dom === domain)
+    );
   });
 
   if (!application) {
-    console.error("DOMAIN VALIDATION FAILED", {
+    console.error("HOST VALIDATION FAILED", {
       received_domain: domain,
 
-      registered_domains: rows.map(function (row) {
-        return normalizeDomain(row.domain);
+      registered_hosts: rows.map(function (row) {
+        return {
+          subdomain: normalizeDomain(row.subdomain),
+          domain: normalizeDomain(row.domain)
+        };
       })
     });
 
@@ -889,26 +688,9 @@ async function getApplicationForEvent(env, event, request) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| CHECK USER SUBSCRIPTION
-|--------------------------------------------------------------------------
-|
-| PRESERVED FROM YOUR ORIGINAL WORKER.
-|
-| ACTIVE:
-|   Allow tracking.
-|
-| NULL:
-|   Change status to Active and allow tracking.
-|
-| OTHER STATUS:
-|   Reject tracking.
-|
-| NO SUBSCRIPTION:
-|   Reject tracking.
-|--------------------------------------------------------------------------
-*/
+/* ------------------------- CHECK USER SUBSCRIPTION ----------------------- */
+/* ACTIVE -> allow. NULL -> set Active and allow.
+   Other status or no subscription -> reject. */
 
 async function checkUserSubscription(env, userId) {
   if (!userId) {
@@ -951,7 +733,6 @@ async function checkUserSubscription(env, userId) {
     );
   }
 
-  // No subscription.
   if (!Array.isArray(rows) || rows.length === 0) {
     console.log(
       "No subscription found for user:",
@@ -963,7 +744,6 @@ async function checkUserSubscription(env, userId) {
 
   var subscription = rows[0];
 
-  // NULL -> ACTIVE.
   if (subscription.subscription_status === null) {
     var updateResponse = await supabaseRequest(
       env,
@@ -1005,7 +785,6 @@ async function checkUserSubscription(env, userId) {
     return true;
   }
 
-  // Only Active subscriptions.
   var status = String(
     subscription.subscription_status
   )
@@ -1025,11 +804,7 @@ async function checkUserSubscription(env, userId) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| BUILD ACTIVITY MESSAGE
-|--------------------------------------------------------------------------
-*/
+/* --------------------------- BUILD ACTIVITY TEXT ------------------------- */
 
 function buildActivityString(eventWrapper) {
   var inner =
@@ -1117,15 +892,8 @@ function buildActivityString(eventWrapper) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| SAVE ACTIVITY
-|--------------------------------------------------------------------------
-|
-| IMPORTANT:
-| No status field is inserted.
-|--------------------------------------------------------------------------
-*/
+/* ------------------------------ SAVE ACTIVITY ---------------------------- */
+/* No status field is inserted. */
 
 async function saveActivity(env, event, application) {
   var activityString =
@@ -1166,18 +934,13 @@ async function saveActivity(env, event, application) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| PROCESS EVENT
-|--------------------------------------------------------------------------
-*/
+/* ------------------------------ PROCESS EVENT ---------------------------- */
 
 async function processEvent(env, event, request) {
   if (!event) {
     throw new Error("Empty event");
   }
 
-  // API key fallback.
   if (!event.api_key && request && request.headers) {
     var headerKey =
       request.headers.get("x-api-key");
@@ -1187,7 +950,6 @@ async function processEvent(env, event, request) {
     }
   }
 
-  // Application validation.
   var application =
     await getApplicationForEvent(
       env,
@@ -1195,7 +957,6 @@ async function processEvent(env, event, request) {
       request
     );
 
-  // Subscription validation.
   var subscriptionActive =
     await checkUserSubscription(
       env,
@@ -1210,7 +971,6 @@ async function processEvent(env, event, request) {
     };
   }
 
-  // Legacy error event.
   if (event.type === "ERROR") {
     var simpleErrorEvent = {
       api_key: event.api_key,
@@ -1246,7 +1006,6 @@ async function processEvent(env, event, request) {
     };
   }
 
-  // Normal activity.
   await saveActivity(
     env,
     event,
@@ -1260,11 +1019,7 @@ async function processEvent(env, event, request) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| JSON RESPONSE
-|--------------------------------------------------------------------------
-*/
+/* ----------------------------- JSON RESPONSE ----------------------------- */
 
 function jsonResponse(body, status) {
   return new Response(
@@ -1281,17 +1036,12 @@ function jsonResponse(body, status) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| MAIN WORKER
-|--------------------------------------------------------------------------
-*/
+/* ------------------------------ MAIN WORKER ------------------------------ */
 
 export default {
 
   async fetch(request, env) {
 
-    // OPTIONS.
     if (request.method === "OPTIONS") {
       return new Response(
         null,
@@ -1302,10 +1052,8 @@ export default {
       );
     }
 
-    // URL.
     var url = new URL(request.url);
 
-    // Serve browser SDK.
     if (
       request.method === "GET" &&
       (
@@ -1331,7 +1079,6 @@ export default {
       );
     }
 
-    // Health check.
     if (
       request.method === "GET" &&
       url.pathname === "/"
@@ -1349,7 +1096,6 @@ export default {
       );
     }
 
-    // Environment validation.
     if (!env.SUPABASE_URL) {
       return jsonResponse(
         {
@@ -1371,12 +1117,10 @@ export default {
       );
     }
 
-    // POST event.
     if (request.method === "POST") {
       try {
         var body = await request.json();
 
-        // Batch events.
         if (
           body &&
           body.type === "BATCH" &&
@@ -1427,7 +1171,6 @@ export default {
           );
         }
 
-        // Single event.
         var result =
           await processEvent(
             env,
@@ -1472,7 +1215,6 @@ export default {
       }
     }
 
-    // Not found.
     return jsonResponse(
       {
         success: false,
